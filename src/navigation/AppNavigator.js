@@ -2,6 +2,7 @@ import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import DashboardScreen from '../screens/DashboardScreen';
+import CommitmentsScreen from '../screens/CommitmentsScreen';
 import JournalScreen from '../screens/JournalScreen';
 import InsightsScreen from '../screens/InsightsScreen';
 import LegacyScreen from '../screens/LegacyScreen';
@@ -15,6 +16,8 @@ function tabBarIconName(routeName, focused) {
   switch (routeName) {
     case 'Dashboard':
       return focused ? 'home' : 'home-outline';
+    case 'Commitments':
+      return focused ? 'list' : 'list-outline';
     case 'Journal':
       return focused ? 'book' : 'book-outline';
     case 'Insights':
@@ -52,6 +55,7 @@ export default function AppNavigator() {
         ),
       })}>
       <Tab.Screen name="Dashboard" component={DashboardScreen} />
+      <Tab.Screen name="Commitments" component={CommitmentsScreen} />
       <Tab.Screen name="Journal" component={JournalScreen} />
       <Tab.Screen name="Insights" component={InsightsScreen} />
       <Tab.Screen name="Legacy" component={LegacyScreen} />

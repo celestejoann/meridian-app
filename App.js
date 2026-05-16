@@ -5,7 +5,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { supabase } from './src/lib/supabase';
 import AuthScreen from './src/screens/AuthScreen';
-import AppNavigator from './src/navigation/AppNavigator';
+import MainApp from './src/navigation/MainApp';
 
 export default function App() {
   const [session, setSession] = useState(null);
@@ -49,7 +49,7 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <NavigationContainer>
-        <AppNavigator />
+        <MainApp />
       </NavigationContainer>
     </SafeAreaProvider>
   );

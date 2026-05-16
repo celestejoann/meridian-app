@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
+import { useAppNavigation } from '../navigation/AppNavigationContext';
 
 function memberSinceLabel(createdAt) {
   if (!createdAt) return '';
@@ -44,6 +45,7 @@ function SettingsCard({ children }) {
 }
 
 export default function SettingsScreen() {
+  const { openLegacy } = useAppNavigation();
   const [loading, setLoading] = useState(true);
   const [email, setEmail] = useState('');
   const [memberSince, setMemberSince] = useState('');
@@ -73,7 +75,17 @@ export default function SettingsScreen() {
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}>
-        <Text style={styles.headerTitle}>Settings</Text>
+        <Text
+          style={{
+            fontSize: 32,
+            fontWeight: '300',
+            color: '#ffffff',
+            paddingHorizontal: 20,
+            paddingTop: 20,
+            paddingBottom: 4,
+          }}>
+          Settings
+        </Text>
 
         {loading ? (
           <View style={styles.loaderWrap}>
@@ -95,6 +107,7 @@ export default function SettingsScreen() {
 
             <SectionLabel>ACCOUNT</SectionLabel>
             <SettingsCard>
+              <SettingsRow label="Legacy" onPress={openLegacy} />
               <SettingsRow label="Edit Profile" />
               <SettingsRow label="Notifications" />
               <SettingsRow label="Privacy & Security" isLast />

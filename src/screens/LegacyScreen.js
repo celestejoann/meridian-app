@@ -10,6 +10,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
+import MeridianWordmark from '../components/MeridianWordmark';
 
 const AREA_COLORS = {
   health: '#4ade80',
@@ -130,7 +131,18 @@ export default function LegacyScreen() {
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}>
-        <Text style={styles.headerTitle}>Legacy</Text>
+        <Text
+          style={{
+            fontSize: 32,
+            fontWeight: '300',
+            color: '#ffffff',
+            paddingHorizontal: 20,
+            paddingTop: 20,
+            paddingBottom: 4,
+          }}>
+          Legacy
+        </Text>
+        <MeridianWordmark />
         <Text style={styles.headerSubtitle}>Your story so far</Text>
 
         {loading ? (

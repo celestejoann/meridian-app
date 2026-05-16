@@ -6,11 +6,14 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
+import MeridianWordmark from '../components/MeridianWordmark';
+import { useAppNavigation } from '../navigation/AppNavigationContext';
 
 const AREA_COLORS = {
   health: '#4ade80',
@@ -237,6 +240,7 @@ function HeroStatCard({ emoji, value, label }) {
 }
 
 export default function InsightsScreen() {
+  const { openLegacy } = useAppNavigation();
   const screenWidth = Dimensions.get('window').width;
   const squareSize = Math.floor((screenWidth - 120) / 7) - 4;
   const squareGap = 2;
@@ -409,7 +413,18 @@ export default function InsightsScreen() {
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}>
-        <Text style={styles.pageTitle}>Insights</Text>
+        <Text
+          style={{
+            fontSize: 32,
+            fontWeight: '300',
+            color: '#ffffff',
+            paddingHorizontal: 20,
+            paddingTop: 20,
+            paddingBottom: 4,
+          }}>
+          Insights
+        </Text>
+        <MeridianWordmark />
 
         {loading ? (
           <View style={styles.loaderWrap}>
@@ -552,6 +567,10 @@ export default function InsightsScreen() {
                 ))
               )}
             </View>
+
+            <TouchableOpacity style={styles.legacyLink} onPress={openLegacy}>
+              <Text style={styles.legacyLinkText}>View Legacy ›</Text>
+            </TouchableOpacity>
           </>
         )}
       </ScrollView>
@@ -728,5 +747,16 @@ const styles = StyleSheet.create({
   areaBarFill: {
     height: '100%',
     borderRadius: 3,
+  },
+  legacyLink: {
+    marginTop: 8,
+    marginBottom: 16,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  legacyLinkText: {
+    color: '#6366f1',
+    fontSize: 15,
+    fontWeight: '500',
   },
 });

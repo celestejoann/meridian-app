@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
+import MeridianWordmark from '../components/MeridianWordmark';
 
 const MONTH_NAMES = [
   'January',
@@ -354,13 +355,24 @@ export default function JournalScreen() {
   const inputEditable = isEditable && !entryLoading;
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={styles.safe} edges={['left', 'right']}>
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}>
-        <Text style={styles.pageTitle}>Journal</Text>
+        <Text
+          style={{
+            fontSize: 32,
+            fontWeight: '300',
+            color: '#ffffff',
+            paddingHorizontal: 20,
+            paddingTop: 20,
+            paddingBottom: 4,
+          }}>
+          Journal
+        </Text>
+        <MeridianWordmark />
 
         <View style={styles.card}>
           <View style={styles.calHeader}>

@@ -130,9 +130,33 @@ function headerDateLabel(d) {
   });
 }
 
+const DASHBOARD_AREA_COLORS = {
+  health: '#86efac',
+  finance: '#fbbf24',
+  career: '#60a5fa',
+  relationships: '#f472b6',
+  growth: '#c084fc',
+  recreation: '#fb923c',
+  spirituality: '#38bdf8',
+};
+
 function getAreaColor(area) {
   const key = (area || '').toLowerCase();
-  return AREA_COLORS[key] || COLORS.accent;
+  return DASHBOARD_AREA_COLORS[key] || AREA_COLORS[key] || COLORS.accent;
+}
+
+function isLightAreaColor(hex) {
+  const h = hex.replace('#', '');
+  if (h.length < 6) return false;
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.65;
+}
+
+function getCheckmarkColor(areaColor) {
+  return isLightAreaColor(areaColor) ? '#ffffff' : COLORS.bg;
 }
 
 function getStreakHeroState(todayRate) {
@@ -149,10 +173,10 @@ function getStreakHeroState(todayRate) {
   }
   if (todayRate >= 0.5) {
     return {
-      color: COLORS.green,
-      border: COLORS.green,
+      color: COLORS.streakColor,
+      border: COLORS.streakColor,
       status: "You're still showing up ✦",
-      statusColor: COLORS.green,
+      statusColor: COLORS.streakColor,
     };
   }
   if (isAfterSixPM) {
@@ -195,6 +219,7 @@ function HabitRow({
   variant = 'due',
 }) {
   const areaKey = (habit.area || '').toLowerCase();
+  const areaColor = getAreaColor(habit.area);
   const tagColor = AREA_COLORS[areaKey] || COLORS.muted;
   const done = completionType != null;
   const isCompleted = completionType === 'completed';
@@ -202,7 +227,11 @@ function HabitRow({
 
   const rowStyle = [
     styles.row,
-    isCompleted && styles.rowCompleted,
+    isCompleted && {
+      ...styles.rowCompleted,
+      borderLeftColor: areaColor,
+      backgroundColor: areaColor + '08',
+    },
     variant === 'week' && styles.rowWeek,
   ];
 
@@ -227,13 +256,26 @@ function HabitRow({
     } else {
       leading = (
         <TouchableOpacity
-          style={[styles.checkbox, isCompleted && styles.checkboxOn]}
+          style={[
+            styles.checkbox,
+            { borderColor: areaColor + '50' },
+            isCompleted && {
+              backgroundColor: areaColor,
+              borderColor: areaColor,
+            },
+          ]}
           onPress={onToggle}
           disabled={busy}
           accessibilityRole="checkbox"
           accessibilityState={{ checked: isCompleted, busy }}>
           {isCompleted ? (
-            <Text style={styles.checkMark}>✓</Text>
+            <Text
+              style={[
+                styles.checkMark,
+                { color: getCheckmarkColor(areaColor) },
+              ]}>
+              ✓
+            </Text>
           ) : null}
         </TouchableOpacity>
       );
@@ -246,7 +288,11 @@ function HabitRow({
         disabled={busy}
         accessibilityRole="checkbox"
         accessibilityState={{ checked: isCompleted, busy }}>
-        <Text style={[styles.weekDot, isCompleted && styles.weekDotDone]}>
+        <Text
+          style={[
+            styles.weekDot,
+            { color: isCompleted ? areaColor : areaColor + '50' },
+          ]}>
           {isCompleted ? '●' : '○'}
         </Text>
       </TouchableOpacity>
@@ -934,8 +980,6 @@ const styles = StyleSheet.create({
   },
   rowCompleted: {
     borderLeftWidth: 3,
-    borderLeftColor: COLORS.green,
-    backgroundColor: COLORS.green + '08',
   },
   rowWeek: {
     paddingVertical: 10,
@@ -945,17 +989,11 @@ const styles = StyleSheet.create({
     height: 26,
     borderRadius: 8,
     borderWidth: 2,
-    borderColor: COLORS.borderLight,
     marginRight: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  checkboxOn: {
-    backgroundColor: COLORS.green,
-    borderColor: COLORS.green,
-  },
   checkMark: {
-    color: COLORS.text,
     fontSize: 14,
     fontWeight: '700',
   },
@@ -981,10 +1019,6 @@ const styles = StyleSheet.create({
   },
   weekDot: {
     fontSize: 18,
-    color: COLORS.borderLight,
-  },
-  weekDotDone: {
-    color: COLORS.green,
   },
   habitTextCol: {
     flex: 1,

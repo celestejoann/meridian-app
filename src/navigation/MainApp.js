@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -28,6 +29,7 @@ const BOTTOM_TABS = [
   { key: 'commitments', label: 'Commitments', icon: 'list', iconOutline: 'list-outline' },
   { key: 'projects', label: 'Projects', icon: 'folder', iconOutline: 'folder-outline' },
   { key: 'insights', label: 'Insights', icon: 'bar-chart', iconOutline: 'bar-chart-outline' },
+  { key: 'legacy', label: 'Legacy', icon: 'trophy', iconOutline: 'trophy-outline' },
   { key: 'settings', label: 'Settings', icon: 'settings', iconOutline: 'settings-outline' },
 ];
 
@@ -43,7 +45,14 @@ export default function MainApp() {
     setBottomTab('legacy');
   }, []);
 
-  const navContext = useMemo(() => ({ openLegacy }), [openLegacy]);
+  const openSettings = useCallback(() => {
+    setBottomTab('settings');
+  }, []);
+
+  const navContext = useMemo(
+    () => ({ openLegacy, openSettings }),
+    [openLegacy, openSettings]
+  );
 
   const selectTopTab = useCallback((index) => {
     setBottomTab(null);
@@ -58,7 +67,6 @@ export default function MainApp() {
   }, []);
 
   const selectBottomTab = useCallback((key) => {
-    if (key === 'legacy') return;
     setBottomTab(key);
   }, []);
 
@@ -70,21 +78,10 @@ export default function MainApp() {
         return <ProjectsScreen />;
       case 'insights':
         return <InsightsScreen />;
+      case 'legacy':
+        return <LegacyScreen />;
       case 'settings':
         return <SettingsScreen />;
-      case 'legacy':
-        return (
-          <View style={styles.legacyWrap}>
-            <Pressable
-              style={styles.legacyBack}
-              onPress={() => setBottomTab('settings')}>
-              <Text style={styles.legacyBackText}>← Settings</Text>
-            </Pressable>
-            <View style={styles.legacyContent}>
-              <LegacyScreen />
-            </View>
-          </View>
-        );
       default:
         return null;
     }
@@ -188,6 +185,13 @@ export default function MainApp() {
                   size={24}
                   color={active ? '#6366f1' : '#ffffff40'}
                 />
+                <Text
+                  style={[
+                    styles.bottomTabLabel,
+                    { color: active ? '#6366f1' : '#ffffff40' },
+                  ]}>
+                  {tab.label}
+                </Text>
               </Pressable>
             );
           })}
@@ -282,5 +286,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 4,
+  },
+  bottomTabLabel: {
+    fontSize: 10,
+    marginTop: 2,
+    marginBottom: 4,
+    fontFamily: Platform.select({
+      ios: 'Menlo',
+      android: 'monospace',
+      default: 'monospace',
+    }),
   },
 });

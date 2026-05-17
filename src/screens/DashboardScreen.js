@@ -1,6 +1,7 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -9,6 +10,12 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
+import { useFonts } from 'expo-font';
+import {
+  PlayfairDisplay_400Regular,
+  PlayfairDisplay_700Bold,
+  PlayfairDisplay_300Light,
+} from '@expo-google-fonts/playfair-display';
 import { supabase } from '../lib/supabase';
 
 const AREA_COLORS = {
@@ -139,6 +146,11 @@ function headerDateLabel(d) {
   });
 }
 
+function getAreaColor(area) {
+  const key = (area || '').toLowerCase();
+  return AREA_COLORS[key] || '#6366f1';
+}
+
 function getStreakHeroState(todayRate) {
   const hour = new Date().getHours();
   const isAfterSixPM = hour >= 18;
@@ -241,9 +253,9 @@ function HabitRow({
         onPress={onToggle}
         disabled={busy}
         accessibilityRole="checkbox"
-        accessibilityState={{ checked: done, busy }}>
-        <Text style={[styles.weekDot, done && styles.weekDotDone]}>
-          {done ? '●' : '○'}
+        accessibilityState={{ checked: isCompleted, busy }}>
+        <Text style={[styles.weekDot, isCompleted && styles.weekDotDone]}>
+          {isCompleted ? '●' : '○'}
         </Text>
       </TouchableOpacity>
     );
@@ -278,9 +290,17 @@ function HabitRow({
 }
 
 export default function DashboardScreen() {
+  const [fontsLoaded] = useFonts({
+    PlayfairDisplay_400Regular,
+    PlayfairDisplay_700Bold,
+    PlayfairDisplay_300Light,
+  });
+
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState(null);
   const [habits, setHabits] = useState([]);
+  const [userAreas, setUserAreas] = useState([]);
+  const [userIdentities, setUserIdentities] = useState([]);
   const [todayByHabit, setTodayByHabit] = useState(() => new Map());
   const [weekCompletions, setWeekCompletions] = useState([]);
   const [streak, setStreak] = useState(0);
@@ -330,10 +350,20 @@ export default function DashboardScreen() {
     [dueToday, todayByHabit]
   );
 
+  const habitsForTodayRate = useMemo(() => {
+    const weekHabits = thisWeek.map((item) => item.habit);
+    return [...dueToday, ...weekHabits];
+  }, [dueToday, thisWeek]);
+
+  const todayCompletionsCount = useMemo(
+    () => habitsForTodayRate.filter((h) => todayByHabit.has(h.id)).length,
+    [habitsForTodayRate, todayByHabit]
+  );
+
   const todayRate = useMemo(() => {
-    if (dueToday.length === 0) return 0;
-    return dueTodayDoneCount / dueToday.length;
-  }, [dueToday.length, dueTodayDoneCount]);
+    if (habitsForTodayRate.length === 0) return 0;
+    return todayCompletionsCount / habitsForTodayRate.length;
+  }, [habitsForTodayRate.length, todayCompletionsCount]);
 
   const todayPct = Math.round(todayRate * 100);
 
@@ -368,6 +398,8 @@ export default function DashboardScreen() {
     if (userErr || !userData?.user) {
       setUserId(null);
       setHabits([]);
+      setUserAreas([]);
+      setUserIdentities([]);
       setTodayByHabit(new Map());
       setWeekCompletions([]);
       setStreak(0);
@@ -378,20 +410,15 @@ export default function DashboardScreen() {
     const uid = userData.user.id;
     setUserId(uid);
 
-    const today = new Date();
-    const todayStr =
-      today.getFullYear() +
-      '-' +
-      String(today.getMonth() + 1).padStart(2, '0') +
-      '-' +
-      String(today.getDate()).padStart(2, '0');
-
-    const mondayStr = getMondayKey(today);
+    const todayStr = formatLocalDateKey(new Date());
+    const mondayStr = getMondayKey(new Date());
 
     const [
       { data: habitsData, error: habitsErr },
       { data: todayRows },
       { data: weekRows },
+      { data: areasData },
+      { data: identitiesData },
     ] = await Promise.all([
       supabase
         .from('habits')
@@ -410,6 +437,8 @@ export default function DashboardScreen() {
         .eq('user_id', uid)
         .gte('completed_date', mondayStr)
         .lte('completed_date', todayStr),
+      supabase.from('user_areas').select('*').eq('user_id', uid),
+      supabase.from('user_identities').select('*').eq('user_id', uid),
     ]);
 
     if (habitsErr) {
@@ -424,6 +453,8 @@ export default function DashboardScreen() {
     }
     setTodayByHabit(todayMap);
     setWeekCompletions(weekRows ?? []);
+    setUserAreas(areasData ?? []);
+    setUserIdentities(identitiesData ?? []);
 
     await recalcStreak(uid);
     setLoading(false);
@@ -435,20 +466,9 @@ export default function DashboardScreen() {
     }, [load])
   );
 
-  const todayStr = useCallback(() => {
-    const today = new Date();
-    return (
-      today.getFullYear() +
-      '-' +
-      String(today.getMonth() + 1).padStart(2, '0') +
-      '-' +
-      String(today.getDate()).padStart(2, '0')
-    );
-  }, []);
-
   const setCompletion = async (habitId, nextChecked, completionType = 'completed') => {
     if (!userId) return;
-    const dateStr = todayStr();
+    const dateStr = todayKey;
 
     const prevToday = new Map(todayByHabit);
     const prevWeek = weekCompletions;
@@ -501,6 +521,7 @@ export default function DashboardScreen() {
         await supabase
           .from('habit_completions')
           .delete()
+          .eq('user_id', userId)
           .eq('habit_id', habitId)
           .eq('completed_date', dateStr);
 
@@ -515,10 +536,86 @@ export default function DashboardScreen() {
         const { error } = await supabase
           .from('habit_completions')
           .delete()
+          .eq('user_id', userId)
           .eq('habit_id', habitId)
           .eq('completed_date', dateStr);
         if (error) throw error;
       }
+      await recalcStreak(userId);
+    } catch {
+      setTodayByHabit(prevToday);
+      setWeekCompletions(prevWeek);
+    } finally {
+      setToggleBusyId(null);
+    }
+  };
+
+  const toggleWeekHabit = async (habitId) => {
+    if (!userId) return;
+
+    const dateStr = todayKey;
+    const hasCompletionToday = todayByHabit.has(habitId);
+
+    const prevToday = new Map(todayByHabit);
+    const prevWeek = weekCompletions;
+
+    if (hasCompletionToday) {
+      const nextToday = new Map(todayByHabit);
+      nextToday.delete(habitId);
+      const nextWeek = weekCompletions.filter(
+        (r) =>
+          !(
+            r.habit_id === habitId &&
+            String(r.completed_date).slice(0, 10) === dateStr
+          )
+      );
+
+      setTodayByHabit(nextToday);
+      setWeekCompletions(nextWeek);
+      setToggleBusyId(habitId);
+
+      try {
+        const { error } = await supabase
+          .from('habit_completions')
+          .delete()
+          .eq('user_id', userId)
+          .eq('habit_id', habitId)
+          .eq('completed_date', dateStr);
+        if (error) throw error;
+        await recalcStreak(userId);
+      } catch {
+        setTodayByHabit(prevToday);
+        setWeekCompletions(prevWeek);
+      } finally {
+        setToggleBusyId(null);
+      }
+      return;
+    }
+
+    const nextToday = new Map(todayByHabit);
+    nextToday.set(habitId, 'completed');
+    const nextWeek = [
+      ...weekCompletions,
+      {
+        habit_id: habitId,
+        user_id: userId,
+        completed_date: dateStr,
+        completion_type: 'completed',
+      },
+    ];
+
+    setTodayByHabit(nextToday);
+    setWeekCompletions(nextWeek);
+    setToggleBusyId(habitId);
+
+    try {
+      const { error } = await supabase.from('habit_completions').insert({
+        habit_id: habitId,
+        user_id: userId,
+        completed_date: dateStr,
+        completion_type: 'completed',
+      });
+      if (error) throw error;
       await recalcStreak(userId);
     } catch {
       setTodayByHabit(prevToday);
@@ -548,7 +645,13 @@ export default function DashboardScreen() {
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}>
-        <Text style={styles.headerTitle}>Today</Text>
+        <Text
+          style={[
+            styles.headerTitle,
+            fontsLoaded && styles.headerTitleFont,
+          ]}>
+          Today
+        </Text>
         <Text style={styles.headerDate}>{dateSubtitle}</Text>
 
         {loading ? (
@@ -592,7 +695,45 @@ export default function DashboardScreen() {
               </View>
             </View>
 
+            {userIdentities.length > 0 ? (
+              <View style={styles.whoIAmSection}>
+                <Text style={styles.whoIAmTitle}>WHO I AM</Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.identityScrollContent}>
+                  {userIdentities.map((identity) => {
+                    const areaKey = identity.area_slug || identity.area;
+                    const areaColor = getAreaColor(areaKey);
+                    return (
+                      <View
+                        key={identity.id}
+                        style={[
+                          styles.identityCard,
+                          { borderLeftColor: areaColor },
+                        ]}>
+                        <Text
+                          style={[styles.identityAreaLabel, { color: areaColor }]}>
+                          {(areaKey || '').toUpperCase()}
+                        </Text>
+                        <Text style={styles.identityStatement}>
+                          I am someone who {identity.statement}
+                        </Text>
+                      </View>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+            ) : null}
+
             <Card>
+              <Text
+                style={[
+                  styles.playfairSectionHeading,
+                  fontsLoaded && styles.playfairSectionHeadingFont,
+                ]}>
+                Today&apos;s commitments
+              </Text>
               <Text style={styles.sectionTitle}>DUE TODAY</Text>
               {dueToday.length > 0 ? (
                 <Text style={styles.dueCount}>
@@ -621,6 +762,13 @@ export default function DashboardScreen() {
 
             {thisWeek.length > 0 ? (
               <Card>
+                <Text
+                  style={[
+                    styles.playfairSectionHeading,
+                    fontsLoaded && styles.playfairSectionHeadingFont,
+                  ]}>
+                  Today&apos;s actions
+                </Text>
                 <Text style={styles.sectionTitle}>THIS WEEK</Text>
                 {thisWeek.map(({ habit, subtitle }) => {
                   const busy = toggleBusyId === habit.id;
@@ -630,7 +778,7 @@ export default function DashboardScreen() {
                       habit={habit}
                       completionType={todayByHabit.get(habit.id) ?? null}
                       busy={busy}
-                      onToggle={() => toggleHabit(habit.id)}
+                      onToggle={() => toggleWeekHabit(habit.id)}
                       subtitle={subtitle}
                       variant="week"
                     />
@@ -658,16 +806,76 @@ const styles = StyleSheet.create({
     paddingBottom: 32,
   },
   headerTitle: {
-    fontSize: 32,
+    fontSize: 36,
     fontWeight: '300',
     color: '#ffffff',
     marginTop: 8,
+  },
+  headerTitleFont: {
+    fontFamily: 'PlayfairDisplay_300Light',
   },
   headerDate: {
     marginTop: 6,
     fontSize: 14,
     color: '#ffffff60',
     marginBottom: 20,
+    fontFamily: Platform.select({
+      ios: 'Menlo',
+      android: 'monospace',
+      default: 'monospace',
+    }),
+  },
+  playfairSectionHeading: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#ffffff',
+    marginBottom: 12,
+  },
+  playfairSectionHeadingFont: {
+    fontFamily: 'PlayfairDisplay_700Bold',
+  },
+  whoIAmSection: {
+    marginBottom: 16,
+  },
+  whoIAmTitle: {
+    fontSize: 9,
+    letterSpacing: 2,
+    color: '#6366f1',
+    textTransform: 'uppercase',
+    marginBottom: 12,
+    fontFamily: Platform.select({
+      ios: 'Menlo',
+      android: 'monospace',
+      default: 'monospace',
+    }),
+  },
+  identityScrollContent: {
+    paddingRight: 8,
+  },
+  identityCard: {
+    backgroundColor: '#0f0f1e',
+    borderRadius: 16,
+    padding: 16,
+    marginRight: 12,
+    width: 200,
+    borderLeftWidth: 3,
+  },
+  identityAreaLabel: {
+    fontSize: 12,
+    letterSpacing: 1,
+    marginBottom: 8,
+    fontFamily: Platform.select({
+      ios: 'Menlo',
+      android: 'monospace',
+      default: 'monospace',
+    }),
+  },
+  identityStatement: {
+    fontSize: 13,
+    color: '#ffffff',
+    fontStyle: 'italic',
+    fontWeight: '300',
+    lineHeight: 20,
   },
   loaderWrap: {
     paddingVertical: 48,
@@ -721,20 +929,36 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#ffffff',
+    fontSize: 9,
+    letterSpacing: 2,
+    color: '#6366f1',
+    textTransform: 'uppercase',
     marginBottom: 4,
+    fontFamily: Platform.select({
+      ios: 'Menlo',
+      android: 'monospace',
+      default: 'monospace',
+    }),
   },
   dueCount: {
     fontSize: 13,
     color: '#ffffff50',
     marginBottom: 16,
+    fontFamily: Platform.select({
+      ios: 'Menlo',
+      android: 'monospace',
+      default: 'monospace',
+    }),
   },
   emptyText: {
     fontSize: 15,
     color: '#ffffff55',
     marginTop: 12,
+    fontFamily: Platform.select({
+      ios: 'Menlo',
+      android: 'monospace',
+      default: 'monospace',
+    }),
   },
   row: {
     flexDirection: 'row',

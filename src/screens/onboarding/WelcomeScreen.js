@@ -15,7 +15,7 @@ export default function WelcomeScreen({ navigation }) {
       <ProgressDots step={1} />
       <View style={styles.content}>
         <View style={styles.topBlock}>
-          <MeridianLogo size={80} gradientId="welcome" />
+          <MeridianLogo size={80} />
           <Text style={styles.brandName}>Meridian</Text>
           <Text style={styles.tagline}>
             This is a space to know yourself{'\n'}

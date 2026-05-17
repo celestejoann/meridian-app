@@ -1,7 +1,7 @@
 import React, { useCallback } from 'react';
 import { BackHandler, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import Svg, { Polygon, Line, Defs, LinearGradient, Stop } from 'react-native-svg';
+import Svg, { Polygon } from 'react-native-svg';
 import { COLORS, FONTS, AREA_COLORS } from '../../constants/theme';
 
 export const NAME_STORAGE_KEY = 'meridian_user_name';
@@ -108,32 +108,21 @@ export const onboardingStyles = StyleSheet.create({
 
 const styles = onboardingStyles;
 
-export function MeridianLogo({ size = 80, gradientId = 'logo' }) {
-  const lf = `${gradientId}lf`;
-  const rf = `${gradientId}rf`;
+export function MeridianLogo({ size = 80 }) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 512 512">
-      <Defs>
-        <LinearGradient id={lf} x1="0" y1="0" x2="1" y2="1">
-          <Stop offset="0" stopColor="#e8ecff" />
-          <Stop offset="0.5" stopColor="#a5b4fc" />
-          <Stop offset="1" stopColor="#4f46e5" />
-        </LinearGradient>
-        <LinearGradient id={rf} x1="0" y1="0" x2="1" y2="1">
-          <Stop offset="0" stopColor="#3730a3" />
-          <Stop offset="1" stopColor="#0f0e2a" />
-        </LinearGradient>
-      </Defs>
-      <Polygon points="256,82 256,352 382,352" fill={`url(#${rf})`} />
-      <Polygon points="256,82 256,352 130,352" fill={`url(#${lf})`} />
-      <Line
-        x1="256"
-        y1="82"
-        x2="256"
-        y2="352"
-        stroke="#f0f4ff"
-        strokeWidth="2"
-        opacity="0.7"
+    <Svg width={size} height={size} viewBox="0 0 40 40">
+      <Polygon
+        points="20,4 36,34 20,28 4,34"
+        fill="none"
+        stroke="#a78bfa"
+        strokeWidth={2}
+        strokeLinejoin="round"
+      />
+      <Polygon
+        points="20,4 28,34 20,28 12,34"
+        fill="#a78bfa"
+        fillOpacity={0.3}
+        stroke="none"
       />
     </Svg>
   );
@@ -142,7 +131,7 @@ export function MeridianLogo({ size = 80, gradientId = 'logo' }) {
 export function MeridianWordmarkSmall() {
   return (
     <View style={styles.wordmarkRow}>
-      <MeridianLogo size={28} gradientId="wm" />
+      <MeridianLogo size={28} />
       <Text style={styles.wordmarkText}>Meridian</Text>
     </View>
   );

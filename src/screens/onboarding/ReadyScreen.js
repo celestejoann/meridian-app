@@ -19,7 +19,7 @@ export default function ReadyScreen({ route, onComplete }) {
       <ProgressDots step={6} />
       <View style={styles.content}>
         <View style={styles.topBlock}>
-          <MeridianLogo size={80} gradientId="ready" />
+          <MeridianLogo size={80} />
           <Text style={styles.heading}>{userName}, you&apos;re ready.</Text>
           <Text style={styles.subtext}>Your practice begins today.</Text>
         </View>

@@ -11,16 +11,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import MeridianWordmark from '../components/MeridianWordmark';
-
-const AREA_COLORS = {
-  health: '#4ade80',
-  finance: '#facc15',
-  career: '#60a5fa',
-  relationships: '#f472b6',
-  growth: '#c084fc',
-  recreation: '#fb923c',
-  spirituality: '#38bdf8',
-};
+import { COLORS, FONTS, AREA_COLORS } from '../constants/theme';
 
 function formatMonthYear(dateStr) {
   if (!dateStr) return '';
@@ -58,7 +49,7 @@ function SectionTitle({ children }) {
 
 function AreaPill({ area }) {
   const areaKey = (area || '').toLowerCase();
-  const color = AREA_COLORS[areaKey] || '#ffffff40';
+  const color = AREA_COLORS[areaKey] || COLORS.muted;
   const label = (area || 'area').replace(/^\w/, (c) => c.toUpperCase());
 
   return (
@@ -135,7 +126,7 @@ export default function LegacyScreen() {
           style={{
             fontSize: 32,
             fontWeight: '300',
-            color: '#ffffff',
+            color: COLORS.text,
             paddingHorizontal: 20,
             paddingTop: 20,
             paddingBottom: 4,
@@ -143,18 +134,18 @@ export default function LegacyScreen() {
           Legacy
         </Text>
         <MeridianWordmark />
-        <Text style={styles.headerSubtitle}>Your story so far</Text>
+        <Text style={styles.headerSubtitle}>Evidence of who you are</Text>
 
         {loading ? (
           <View style={styles.loaderWrap}>
-            <ActivityIndicator color="#6366f1" size={32} />
+            <ActivityIndicator color={COLORS.accent} size={32} />
           </View>
         ) : (
           <>
-            <SectionTitle>COMPLETED PROJECTS</SectionTitle>
+            <SectionTitle>PURSUITS YOU FINISHED</SectionTitle>
             {projects.length === 0 ? (
               <EmptyState>
-                No completed projects yet. Your finished work will appear here.
+                Your pursuits will live here as you complete them.
               </EmptyState>
             ) : (
               projects.map((snapshot) => {
@@ -202,7 +193,7 @@ export default function LegacyScreen() {
                           <AreaPill area={area} />
                         </View>
                         <Text style={styles.projectDate}>
-                          Completed {formatMonthYear(snapshot.completed_at)}
+                          Finished {formatMonthYear(snapshot.completed_at)}
                         </Text>
                         <Text style={styles.projectStats}>
                           {actions} actions · {days} days · {avgLabel} avg score
@@ -215,7 +206,7 @@ export default function LegacyScreen() {
               })
             )}
 
-            <SectionTitle>IDENTITY MILESTONES</SectionTitle>
+            <SectionTitle>MOMENTS OF PROOF</SectionTitle>
             {milestones.length === 0 ? (
               <EmptyState>
                 Milestones appear as you build consistency in each life area.
@@ -242,10 +233,10 @@ export default function LegacyScreen() {
               ))
             )}
 
-            <SectionTitle>ARCHIVED COMMITMENTS</SectionTitle>
+            <SectionTitle>PRACTICES YOU&apos;VE MOVED ON FROM</SectionTitle>
             {archivedHabits.length === 0 ? (
               <EmptyState>
-                Archived commitments will appear here.
+                Practices you&apos;ve moved on from will appear here.
               </EmptyState>
             ) : (
               archivedHabits.map((habit) => {
@@ -266,7 +257,7 @@ export default function LegacyScreen() {
                     {daysCompleted != null ? (
                       <Text style={styles.habitDays}>
                         {daysCompleted} day{daysCompleted === 1 ? '' : 's'}{' '}
-                        completed
+                        showed up
                       </Text>
                     ) : null}
                   </View>
@@ -283,7 +274,7 @@ export default function LegacyScreen() {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: '#080812',
+    backgroundColor: COLORS.bg,
   },
   scroll: {
     flex: 1,
@@ -295,12 +286,12 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 32,
     fontWeight: '300',
-    color: '#ffffff',
+    color: COLORS.text,
     marginTop: 8,
   },
   headerSubtitle: {
     fontSize: 14,
-    color: '#ffffff55',
+    color: COLORS.muted,
     marginTop: 6,
     marginBottom: 24,
   },
@@ -311,25 +302,22 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 9,
     letterSpacing: 2,
-    color: '#6366f1',
+    color: COLORS.accent,
     textTransform: 'uppercase',
     marginBottom: 12,
     marginTop: 8,
-    fontFamily: Platform.select({
-      ios: 'Menlo',
-      android: 'monospace',
-      default: 'monospace',
-    }),
+    fontFamily: FONTS.bodyMedium,
+    letterSpacing: 1.5,
   },
   card: {
-    backgroundColor: '#0f0f1e',
+    backgroundColor: COLORS.surface,
     borderRadius: 20,
     padding: 16,
     marginBottom: 12,
   },
   emptyText: {
     fontSize: 14,
-    color: '#ffffff55',
+    color: COLORS.muted,
     lineHeight: 20,
     marginBottom: 20,
   },
@@ -343,7 +331,7 @@ const styles = StyleSheet.create({
     paddingRight: 12,
   },
   projectTitle: {
-    color: '#ffffff',
+    color: COLORS.text,
     fontSize: 17,
     fontWeight: '500',
   },
@@ -354,15 +342,15 @@ const styles = StyleSheet.create({
   projectDate: {
     marginTop: 10,
     fontSize: 13,
-    color: '#ffffff60',
+    color: COLORS.mutedLight,
   },
   projectStats: {
     marginTop: 4,
     fontSize: 12,
-    color: '#ffffff45',
+    color: COLORS.muted,
   },
   projectCheck: {
-    color: '#4ade80',
+    color: COLORS.green,
     fontSize: 22,
     fontWeight: '700',
     marginTop: 2,
@@ -373,7 +361,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   areaPillText: {
-    color: '#080812',
+    color: COLORS.bg,
     fontSize: 11,
     fontWeight: '700',
   },
@@ -390,17 +378,17 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   milestoneText: {
-    color: '#ffffff',
+    color: COLORS.text,
     fontSize: 15,
     lineHeight: 22,
   },
   milestoneDate: {
     marginTop: 6,
     fontSize: 13,
-    color: '#ffffff50',
+    color: COLORS.mutedLight,
   },
   habitTitle: {
-    color: '#ffffff',
+    color: COLORS.text,
     fontSize: 16,
     fontWeight: '500',
   },
@@ -411,11 +399,11 @@ const styles = StyleSheet.create({
   habitArchived: {
     marginTop: 10,
     fontSize: 13,
-    color: '#ffffff50',
+    color: COLORS.mutedLight,
   },
   habitDays: {
     marginTop: 4,
     fontSize: 12,
-    color: '#ffffff45',
+    color: COLORS.muted,
   },
 });

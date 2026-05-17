@@ -1,6 +1,7 @@
 import React, { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Linking,
   Platform,
   Pressable,
@@ -13,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { useAppNavigation } from '../navigation/AppNavigationContext';
+import { COLORS, FONTS } from '../constants/theme';
 
 function memberSinceLabel(createdAt) {
   if (!createdAt) return '';
@@ -79,7 +81,7 @@ export default function SettingsScreen() {
           style={{
             fontSize: 32,
             fontWeight: '300',
-            color: '#ffffff',
+            color: COLORS.text,
             paddingHorizontal: 20,
             paddingTop: 20,
             paddingBottom: 4,
@@ -89,7 +91,7 @@ export default function SettingsScreen() {
 
         {loading ? (
           <View style={styles.loaderWrap}>
-            <ActivityIndicator color="#6366f1" size={32} />
+            <ActivityIndicator color={COLORS.accent} size={32} />
           </View>
         ) : (
           <>
@@ -100,15 +102,15 @@ export default function SettingsScreen() {
               </View>
               {memberSince ? (
                 <Text style={styles.memberSince}>
-                  Member since {memberSince}
+                  With Meridian since {memberSince}
                 </Text>
               ) : null}
             </View>
 
-            <SectionLabel>ACCOUNT</SectionLabel>
+            <SectionLabel>YOUR ACCOUNT</SectionLabel>
             <SettingsCard>
               <SettingsRow label="Legacy" onPress={openLegacy} />
-              <SettingsRow label="Edit Profile" />
+              <SettingsRow label="Your profile" />
               <SettingsRow label="Notifications" />
               <SettingsRow label="Privacy & Security" isLast />
             </SettingsCard>
@@ -133,8 +135,21 @@ export default function SettingsScreen() {
                   styles.signOutBtn,
                   pressed && styles.signOutBtnPressed,
                 ]}
-                onPress={() => supabase.auth.signOut()}>
-                <Text style={styles.signOutText}>Sign Out</Text>
+                onPress={() => {
+                  Alert.alert(
+                    'Step away from Meridian?',
+                    'You can return anytime.',
+                    [
+                      { text: 'Cancel', style: 'cancel' },
+                      {
+                        text: 'Step away',
+                        style: 'destructive',
+                        onPress: () => supabase.auth.signOut(),
+                      },
+                    ]
+                  );
+                }}>
+                <Text style={styles.signOutText}>Step away</Text>
               </Pressable>
             </View>
           </>
@@ -147,7 +162,7 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: '#080812',
+    backgroundColor: COLORS.bg,
   },
   scroll: {
     flex: 1,
@@ -159,7 +174,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 32,
     fontWeight: '300',
-    color: '#ffffff',
+    color: COLORS.text,
     marginTop: 8,
     marginBottom: 20,
   },
@@ -168,13 +183,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   userCard: {
-    backgroundColor: '#0f0f1e',
+    backgroundColor: COLORS.surface,
     borderRadius: 20,
     padding: 20,
     marginBottom: 24,
   },
   userEmail: {
-    color: '#ffffff',
+    color: COLORS.text,
     fontSize: 17,
     fontWeight: '500',
   },
@@ -184,34 +199,31 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 999,
-    backgroundColor: '#ffffff12',
+    backgroundColor: COLORS.border,
     borderWidth: 1,
-    borderColor: '#ffffff20',
+    borderColor: COLORS.borderLight,
   },
   badgeText: {
-    color: '#ffffff90',
+    color: COLORS.mutedLight,
     fontSize: 12,
     fontWeight: '600',
   },
   memberSince: {
     marginTop: 10,
     fontSize: 13,
-    color: '#ffffff50',
+    color: COLORS.mutedLight,
   },
   sectionLabel: {
     fontSize: 9,
     letterSpacing: 2,
-    color: '#6366f1',
+    color: COLORS.accent,
     textTransform: 'uppercase',
     marginBottom: 8,
-    fontFamily: Platform.select({
-      ios: 'Menlo',
-      android: 'monospace',
-      default: 'monospace',
-    }),
+    fontFamily: FONTS.bodyMedium,
+    letterSpacing: 1.5,
   },
   card: {
-    backgroundColor: '#0f0f1e',
+    backgroundColor: COLORS.surface,
     borderRadius: 20,
     marginBottom: 16,
     overflow: 'hidden',
@@ -222,34 +234,34 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#ffffff08',
+    borderBottomColor: COLORS.border,
   },
   rowLast: {
     borderBottomWidth: 0,
   },
   rowPressed: {
-    backgroundColor: '#ffffff06',
+    backgroundColor: COLORS.border,
   },
   rowText: {
-    color: '#ffffff',
+    color: COLORS.text,
     fontSize: 15,
   },
   rowArrow: {
-    color: '#ffffff50',
+    color: COLORS.mutedLight,
     fontSize: 20,
     marginTop: -2,
   },
   dangerCard: {
-    backgroundColor: '#1a1018',
+    backgroundColor: COLORS.surface,
     borderRadius: 20,
     padding: 16,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: '#f8717125',
+    borderColor: COLORS.red + '25',
   },
   signOutBtn: {
     borderWidth: 1,
-    borderColor: '#f87171',
+    borderColor: COLORS.red,
     borderRadius: 12,
     padding: 16,
     marginTop: 8,
@@ -258,7 +270,7 @@ const styles = StyleSheet.create({
     opacity: 0.85,
   },
   signOutText: {
-    color: '#f87171',
+    color: COLORS.red,
     fontSize: 16,
     fontWeight: '600',
     textAlign: 'center',

@@ -14,17 +14,8 @@ import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import MeridianWordmark from '../components/MeridianWordmark';
 import { useAppNavigation } from '../navigation/AppNavigationContext';
+import { COLORS, FONTS, AREA_COLORS } from '../constants/theme';
 import Svg, { Polygon, Circle, Text as SvgText, Line } from 'react-native-svg';
-
-const AREA_COLORS = {
-  health: '#4ade80',
-  finance: '#facc15',
-  career: '#60a5fa',
-  relationships: '#f472b6',
-  growth: '#c084fc',
-  recreation: '#fb923c',
-  spirituality: '#38bdf8',
-};
 
 const AREA_ICONS = {
   health: '💚',
@@ -41,11 +32,11 @@ const MEDALS = ['🥇', '🥈', '🥉'];
 const GAP = 2;
 
 const HEATMAP_COLORS = {
-  none: '#1e1e3f',
-  low: '#1a1a2e',
-  midLow: '#1e1e3f',
-  midHigh: '#2d2b6b',
-  high: '#6366f1',
+  none: COLORS.surfaceLight,
+  low: COLORS.surface,
+  midLow: COLORS.surfaceLight,
+  midHigh: COLORS.accentDim,
+  high: COLORS.accent,
 };
 
 const TIMEFRAME_OPTIONS = [
@@ -212,6 +203,31 @@ function getLastNDayKeys(todayKey, n) {
   return keys;
 }
 
+function getPreviousPeriodKeys(todayKey, selectedDays) {
+  const keys = [];
+  let d = addDays(parseDateKey(todayKey), -selectedDays);
+  for (let i = 0; i < selectedDays; i++) {
+    keys.push(formatLocalDateKey(d));
+    d = addDays(d, -1);
+  }
+  return keys;
+}
+
+function avgDailyScoreForKeys(habits, completions, keys, todayKey) {
+  const scored = keys
+    .map((key) => getDayScore(habits, completions, key, todayKey))
+    .filter((p) => p != null);
+  if (scored.length === 0) return null;
+  return Math.round(scored.reduce((a, b) => a + b, 0) / scored.length);
+}
+
+const DOW_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+function dowIndexFromDateKey(key) {
+  const dow = parseDateKey(key).getDay();
+  return dow === 0 ? 6 : dow - 1;
+}
+
 function getHeatmapWeeksGrid(todayKey, numDays) {
   const today = parseDateKey(todayKey);
   const rangeStart = addDays(today, -(numDays - 1));
@@ -260,6 +276,11 @@ function getIdentityStatement(identity) {
     identity.content ||
     ''
   );
+}
+
+function getAreaColor(area) {
+  const key = (area || '').toLowerCase();
+  return AREA_COLORS[key] || COLORS.accent;
 }
 
 function getIdentityPeriodLabel(selectedDays) {
@@ -318,7 +339,7 @@ function LifeWheel({ areas, areasCovered, selectedArea, onSelectArea }) {
     const colorOpacity = completionOpacity(area.completionRate);
     const dotColor = hexToRgba(area.color, colorOpacity);
     const labelColor = area.isEmpty
-      ? '#ffffff25'
+      ? COLORS.muted
       : hexToRgba(area.color, colorOpacity);
     return {
       ...area,
@@ -345,7 +366,7 @@ function LifeWheel({ areas, areasCovered, selectedArea, onSelectArea }) {
             cx={cx}
             cy={cy}
             r={maxRadius * pct}
-            stroke="#ffffff08"
+            stroke={COLORS.border}
             strokeWidth={1}
             fill="none"
           />
@@ -360,20 +381,20 @@ function LifeWheel({ areas, areasCovered, selectedArea, onSelectArea }) {
             stroke={
               selectedArea === p.key
                 ? hexToRgba(p.color, 0.6)
-                : '#ffffff10'
+                : COLORS.border
             }
             strokeWidth={selectedArea === p.key ? 2 : 1}
           />
         ))}
         <Polygon
           points={polygonPoints}
-          fill="#6366f1"
+          fill={COLORS.accent}
           fillOpacity={0.3}
         />
         <Polygon
           points={polygonPoints}
           fill="none"
-          stroke="#6366f1"
+          stroke={COLORS.accent}
           strokeWidth={2}
         />
         {spokes.map(
@@ -413,7 +434,7 @@ function LifeWheel({ areas, areasCovered, selectedArea, onSelectArea }) {
           y={cy - 4}
           fontSize={22}
           fontWeight="600"
-          fill="#6366f1"
+          fill={COLORS.accent}
           textAnchor="middle">
           {`${areasCovered.covered}/${areasCovered.total}`}
         </SvgText>
@@ -421,7 +442,7 @@ function LifeWheel({ areas, areasCovered, selectedArea, onSelectArea }) {
           x={cx}
           y={cy + 16}
           fontSize={10}
-          fill="#ffffff50"
+          fill={COLORS.mutedLight}
           textAnchor="middle">
           areas covered
         </SvgText>
@@ -455,7 +476,15 @@ function LifeWheel({ areas, areasCovered, selectedArea, onSelectArea }) {
 function WhoIAmRow({ row }) {
   return (
     <View
-      style={[styles.identityRow, { borderLeftColor: row.areaColor }]}>
+      style={[
+        styles.identityRow,
+        { borderLeftColor: row.areaColor },
+      ]}>
+      {row.areaLabel ? (
+        <Text style={[styles.identityAreaLabel, { color: row.areaColor }]}>
+          {row.areaLabel}
+        </Text>
+      ) : null}
       <Text style={styles.identityStatement}>{row.statement}</Text>
       {row.hasActivity ? (
         <>
@@ -475,7 +504,7 @@ function WhoIAmRow({ row }) {
         </>
       ) : (
         <Text style={styles.identityNoActivity}>
-          No activity yet {row.periodLabel}
+          Waiting for you to show up here
         </Text>
       )}
     </View>
@@ -504,6 +533,7 @@ export default function InsightsScreen() {
   const [completions, setCompletions] = useState([]);
   const [userAreas, setUserAreas] = useState([]);
   const [userIdentities, setUserIdentities] = useState([]);
+  const [journalEntries, setJournalEntries] = useState([]);
   const [selectedArea, setSelectedArea] = useState(null);
   const [selectedDays, setSelectedDays] = useState(30);
 
@@ -516,17 +546,19 @@ export default function InsightsScreen() {
       setCompletions([]);
       setUserAreas([]);
       setUserIdentities([]);
+      setJournalEntries([]);
       setLoading(false);
       return;
     }
 
-    const since365 = formatLocalDateKey(addDays(new Date(), -364));
+    const since730 = formatLocalDateKey(addDays(new Date(), -729));
 
     const [
       { data: habitsData },
       { data: completionData },
       { data: areasData },
       { data: identitiesData },
+      { data: journalData },
     ] = await Promise.all([
       supabase
         .from('habits')
@@ -537,16 +569,23 @@ export default function InsightsScreen() {
         .from('habit_completions')
         .select('*')
         .eq('user_id', uid)
-        .gte('completed_date', since365)
+        .gte('completed_date', since730)
         .lte('completed_date', todayKey),
       supabase.from('user_areas').select('*').eq('user_id', uid),
       supabase.from('user_identities').select('*').eq('user_id', uid),
+      supabase
+        .from('daily_entries')
+        .select('*')
+        .eq('user_id', uid)
+        .gte('entry_date', since730)
+        .lte('entry_date', todayKey),
     ]);
 
     setHabits(habitsData ?? []);
     setCompletions(completionData ?? []);
     setUserAreas(areasData ?? []);
     setUserIdentities(identitiesData ?? []);
+    setJournalEntries(journalData ?? []);
     setLoading(false);
   }, [todayKey]);
 
@@ -563,6 +602,11 @@ export default function InsightsScreen() {
 
   const rangeStartKey = useMemo(
     () => formatLocalDateKey(addDays(parseDateKey(todayKey), -(selectedDays - 1))),
+    [todayKey, selectedDays]
+  );
+
+  const previousRangeKeys = useMemo(
+    () => getPreviousPeriodKeys(todayKey, selectedDays),
     [todayKey, selectedDays]
   );
 
@@ -605,12 +649,6 @@ export default function InsightsScreen() {
     () => getHeatmapWeeksGrid(todayKey, selectedDays),
     [todayKey, selectedDays]
   );
-
-  useEffect(() => {
-    if (!loading) {
-      scrollRef.current?.scrollToEnd({ animated: false });
-    }
-  }, [loading, heatmapWeeks, squareSize, selectedDays]);
 
   const topHabits = useMemo(() => {
     const stats = habits.map((habit) => {
@@ -674,7 +712,7 @@ export default function InsightsScreen() {
           ua.display_name ||
           areaKey.replace(/^\w/, (c) => c.toUpperCase()),
         icon: ua.icon || AREA_ICONS[areaKey] || '◆',
-        color: ua.color || AREA_COLORS[areaKey] || '#6366f1',
+        color: ua.color || AREA_COLORS[areaKey] || COLORS.accent,
         rate,
         totalDue,
       };
@@ -724,7 +762,7 @@ export default function InsightsScreen() {
           ua.name ||
           ua.display_name ||
           areaKey.replace(/^\w/, (c) => c.toUpperCase()),
-        color: ua.color || AREA_COLORS[areaKey] || '#6366f1',
+        color: ua.color || AREA_COLORS[areaKey] || COLORS.accent,
         habitCount,
         spokeLengthRatio,
         completionRate,
@@ -739,33 +777,30 @@ export default function InsightsScreen() {
     return { covered, total };
   }, [lifeWheelAreas]);
 
-  const identityRows = useMemo(() => {
-    console.log('Identity areas:', userIdentities.map((i) => i.area));
-    console.log('Habit areas:', habits.map((h) => h.area));
+  const identityStartDateStr = useMemo(() => {
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - selectedDays);
+    return startDate.toLocaleDateString('en-CA');
+  }, [selectedDays]);
 
+  const identityRows = useMemo(() => {
     const periodLabel = getIdentityPeriodLabel(selectedDays);
     const habitsById = new Map(habits.map((h) => [h.id, h]));
-    const areaColorMap = new Map();
-    for (const ua of userAreas) {
-      const key = ua.area || ua.name || '';
-      areaColorMap.set(
-        key,
-        ua.color || AREA_COLORS[key.toLowerCase()] || '#6366f1'
-      );
-    }
 
     return userIdentities.map((identity) => {
-      const identityArea = identity.area || '';
-      const areaHabitIds = new Set(
-        habits
-          .filter((h) => (h.area || '') === identityArea)
-          .map((h) => h.id)
+      const areaKey = identity.area_slug || identity.area;
+      const areaColor = getAreaColor(areaKey);
+      const areaLabel = (areaKey || '').toUpperCase();
+      const matchingHabits = habits.filter(
+        (h) =>
+          h.area === identity.area_slug || h.area === identity.area
       );
+      const areaHabitIds = new Set(matchingHabits.map((h) => h.id));
 
       const areaCompletions = completions.filter((row) => {
         if (!areaHabitIds.has(row.habit_id)) return false;
         const d = String(row.completed_date).slice(0, 10);
-        return d >= rangeStartKey && d <= todayKey;
+        return d >= identityStartDateStr;
       });
 
       const count = areaCompletions.length;
@@ -789,10 +824,8 @@ export default function InsightsScreen() {
       return {
         id: identity.id,
         statement: fullStatement,
-        areaColor:
-          areaColorMap.get(identityArea) ||
-          AREA_COLORS[identityArea.toLowerCase()] ||
-          '#6366f1',
+        areaColor,
+        areaLabel,
         count,
         periodLabel,
         mostRecent,
@@ -804,11 +837,132 @@ export default function InsightsScreen() {
     userIdentities,
     habits,
     completions,
-    userAreas,
-    rangeStartKey,
+    identityStartDateStr,
     todayKey,
     selectedDays,
   ]);
+
+  useEffect(() => {
+    if (!loading) {
+      scrollRef.current?.scrollToEnd({ animated: false });
+    }
+  }, [loading, heatmapWeeks, squareSize, selectedDays, identityRows]);
+
+  const dayOfWeekStats = useMemo(() => {
+    const buckets = DOW_LABELS.map((label) => ({ label, scores: [] }));
+
+    for (const key of rangeKeys) {
+      const score = getDayScore(habits, completions, key, todayKey);
+      if (score == null) continue;
+      buckets[dowIndexFromDateKey(key)].scores.push(score);
+    }
+
+    return buckets.map((b) => ({
+      label: b.label,
+      rate:
+        b.scores.length === 0
+          ? null
+          : Math.round(b.scores.reduce((a, c) => a + c, 0) / b.scores.length),
+    }));
+  }, [habits, completions, rangeKeys, todayKey]);
+
+  const dayOfWeekInsight = useMemo(() => {
+    const withData = dayOfWeekStats.filter((d) => d.rate != null);
+    if (withData.length === 0) return null;
+    const strongest = withData.reduce((best, d) =>
+      d.rate > best.rate ? d : best
+    );
+    const dayNames = {
+      Mon: 'Monday',
+      Tue: 'Tuesday',
+      Wed: 'Wednesday',
+      Thu: 'Thursday',
+      Fri: 'Friday',
+      Sat: 'Saturday',
+      Sun: 'Sunday',
+    };
+    return dayNames[strongest.label] || strongest.label;
+  }, [dayOfWeekStats]);
+
+  const hasDayOfWeekData = dayOfWeekStats.some((d) => d.rate != null);
+
+  const periodComparison = useMemo(() => {
+    const currentAvg = avgDailyScoreForKeys(
+      habits,
+      completions,
+      rangeKeys,
+      todayKey
+    );
+    const previousAvg = avgDailyScoreForKeys(
+      habits,
+      completions,
+      previousRangeKeys,
+      todayKey
+    );
+
+    let delta = null;
+    if (currentAvg != null && previousAvg != null) {
+      delta = currentAvg - previousAvg;
+    }
+
+    return { currentAvg, previousAvg, delta };
+  }, [habits, completions, rangeKeys, previousRangeKeys, todayKey]);
+
+  const journalPatterns = useMemo(() => {
+    const entryByDate = new Map();
+    for (const entry of journalEntries) {
+      const key = String(entry.entry_date).slice(0, 10);
+      entryByDate.set(key, entry);
+    }
+
+    const totalDays = rangeKeys.length;
+    let journaledDays = 0;
+    let morningDays = 0;
+    let eveningDays = 0;
+    let bothDays = 0;
+    let neitherDays = 0;
+
+    for (const key of rangeKeys) {
+      const entry = entryByDate.get(key);
+      const hasMorning = Boolean(entry?.journal_note?.trim());
+      const hasEvening = Boolean(entry?.evening_note?.trim());
+
+      if (hasMorning) morningDays += 1;
+      if (hasEvening) eveningDays += 1;
+      if (hasMorning && hasEvening) bothDays += 1;
+      if (!hasMorning && !hasEvening) neitherDays += 1;
+      if (hasMorning || hasEvening) journaledDays += 1;
+    }
+
+    const journaledPct =
+      totalDays === 0 ? 0 : Math.round((journaledDays / totalDays) * 100);
+
+    let observation = '';
+    if (journaledDays === 0) {
+      observation =
+        "The more you reflect, the more you'll see about yourself.";
+    } else if (journaledPct < 30) {
+      observation =
+        'Keep reflecting — patterns will emerge as you show up in your Journal.';
+    } else if (journaledPct <= 70) {
+      observation =
+        "You're building a reflection practice — keep going";
+    } else {
+      observation =
+        'You reflect consistently. Your Journal is revealing who you are.';
+    }
+
+    return {
+      totalDays,
+      journaledDays,
+      journaledPct,
+      morningDays,
+      eveningDays,
+      bothDays,
+      neitherDays,
+      observation,
+    };
+  }, [journalEntries, rangeKeys]);
 
   const handleSelectArea = useCallback((key) => {
     setSelectedArea(key);
@@ -828,7 +982,7 @@ export default function InsightsScreen() {
           style={{
             fontSize: 32,
             fontWeight: '300',
-            color: '#ffffff',
+            color: COLORS.text,
             paddingHorizontal: 20,
             paddingTop: 20,
             paddingBottom: 4,
@@ -866,7 +1020,7 @@ export default function InsightsScreen() {
 
         {loading ? (
           <View style={styles.loaderWrap}>
-            <ActivityIndicator color="#6366f1" size={32} />
+            <ActivityIndicator color={COLORS.accent} size={32} />
           </View>
         ) : (
           <>
@@ -912,7 +1066,7 @@ export default function InsightsScreen() {
               <HeroStatCard
                 emoji="🔥"
                 value={String(currentStreak)}
-                label="day streak"
+                label="days in a row"
               />
               <HeroStatCard
                 value={`${avgScoreRange}%`}
@@ -920,7 +1074,7 @@ export default function InsightsScreen() {
               />
               <HeroStatCard
                 value={String(daysAtTarget)}
-                label="days ≥70%"
+                label="days you've been showing up"
               />
             </View>
 
@@ -991,10 +1145,14 @@ export default function InsightsScreen() {
             </View>
 
             <View style={styles.card}>
-              <SectionTitle>TOP COMMITMENTS</SectionTitle>
+              <SectionTitle>MOST CONSISTENT</SectionTitle>
+              <Text style={styles.sectionSubtitle}>
+                Where you keep showing up
+              </Text>
               {topHabits.length === 0 ? (
                 <Text style={styles.emptyText}>
-                  Complete commitments to see rankings
+                  Show up for commitments to see where you&apos;re most
+                  consistent
                 </Text>
               ) : (
                 topHabits.map((item, index) => (
@@ -1005,10 +1163,10 @@ export default function InsightsScreen() {
                         {item.habit.title}
                       </Text>
                       <Text style={styles.commitmentMeta}>
-                        {item.rate}% completion rate
+                        {item.rate}% consistency
                       </Text>
                       <Text style={styles.commitmentStreak}>
-                        🔥 {item.streak} day{item.streak === 1 ? '' : 's'} streak
+                        🔥 {item.streak} day{item.streak === 1 ? '' : 's'} in a row
                       </Text>
                     </View>
                   </View>
@@ -1060,6 +1218,133 @@ export default function InsightsScreen() {
               )}
             </View>
 
+            <View style={styles.card}>
+              <SectionTitle>BY DAY OF WEEK</SectionTitle>
+              <Text style={styles.sectionSubtitle}>
+                When you most show up
+              </Text>
+              {!hasDayOfWeekData ? (
+                <Text style={styles.emptyText}>
+                  Not enough data yet to show patterns
+                </Text>
+              ) : (
+                <>
+                  <View style={styles.dowChartRow}>
+                    {dayOfWeekStats.map((d) => (
+                      <View key={d.label} style={styles.dowBarCol}>
+                        <Text style={styles.dowPct}>
+                          {d.rate != null ? `${d.rate}%` : '—'}
+                        </Text>
+                        <View style={styles.dowBarTrack}>
+                          <View
+                            style={[
+                              styles.dowBarFill,
+                              {
+                                height:
+                                  d.rate != null ? (d.rate / 100) * 120 : 0,
+                              },
+                            ]}
+                          />
+                        </View>
+                        <Text style={styles.dowLabel}>{d.label}</Text>
+                      </View>
+                    ))}
+                  </View>
+                  {dayOfWeekInsight ? (
+                    <Text style={styles.dowInsight}>
+                      You show up most on {dayOfWeekInsight}s
+                    </Text>
+                  ) : null}
+                </>
+              )}
+            </View>
+
+            <View style={styles.card}>
+              <SectionTitle>THIS PERIOD VS PREVIOUS</SectionTitle>
+              <Text style={styles.sectionSubtitle}>
+                How your practice is evolving
+              </Text>
+              {periodComparison.previousAvg == null ? (
+                <Text style={styles.periodEmpty}>
+                  Your practice is just beginning. Come back tomorrow.
+                </Text>
+              ) : (
+                <>
+                  <View style={styles.periodCompareRow}>
+                    <View style={styles.periodCol}>
+                      <Text style={styles.periodColLabel}>This period</Text>
+                      <Text style={styles.periodBig}>
+                        {periodComparison.currentAvg ?? 0}%
+                      </Text>
+                    </View>
+                    <View style={styles.periodCol}>
+                      <Text style={styles.periodColLabel}>Previous</Text>
+                      <Text style={styles.periodBig}>
+                        {periodComparison.previousAvg}%
+                      </Text>
+                    </View>
+                  </View>
+                  {periodComparison.delta != null ? (
+                    <Text
+                      style={[
+                        styles.periodDelta,
+                        {
+                          color:
+                            periodComparison.delta >= 0
+                              ? COLORS.green
+                              : COLORS.red,
+                        },
+                      ]}>
+                      {periodComparison.delta >= 0 ? '↑' : '↓'}{' '}
+                      {periodComparison.delta >= 0 ? '+' : ''}
+                      {periodComparison.delta}%
+                    </Text>
+                  ) : null}
+                </>
+              )}
+            </View>
+
+            <View style={styles.card}>
+              <SectionTitle>PATTERNS FROM YOUR JOURNAL</SectionTitle>
+              <Text style={styles.sectionSubtitle}>
+                Patterns in your reflection
+              </Text>
+              {journalPatterns.journaledDays === 0 ? (
+                <>
+                  <Text style={styles.journalCount}>
+                    0 of {journalPatterns.totalDays} days journaled
+                  </Text>
+                  <View style={styles.journalBarTrack}>
+                    <View
+                      style={[styles.journalBarFill, { width: '0%' }]}
+                    />
+                  </View>
+                  <Text style={styles.journalObservation}>
+                    The more you reflect, the more you&apos;ll see about
+                    yourself.
+                  </Text>
+                </>
+              ) : (
+                <>
+                  <Text style={styles.journalCount}>
+                    {journalPatterns.journaledDays} of{' '}
+                    {journalPatterns.totalDays} days journaled
+                  </Text>
+                  <View style={styles.journalBarTrack}>
+                    <View
+                      style={[
+                        styles.journalBarFill,
+                        { width: `${journalPatterns.journaledPct}%` },
+                      ]}
+                    />
+                  </View>
+                  <Text style={styles.journalObservation}>
+                    {journalPatterns.observation}
+                  </Text>
+                </>
+              )}
+            </View>
+
             <TouchableOpacity style={styles.legacyLink} onPress={openLegacy}>
               <Text style={styles.legacyLinkText}>View Legacy ›</Text>
             </TouchableOpacity>
@@ -1073,7 +1358,7 @@ export default function InsightsScreen() {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: '#080812',
+    backgroundColor: COLORS.bg,
   },
   scroll: {
     flex: 1,
@@ -1085,7 +1370,7 @@ const styles = StyleSheet.create({
   pageTitle: {
     fontSize: 32,
     fontWeight: '300',
-    color: '#ffffff',
+    color: COLORS.text,
     marginTop: 8,
     marginBottom: 16,
   },
@@ -1100,7 +1385,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   timeframePill: {
-    backgroundColor: '#1a1a2e',
+    backgroundColor: COLORS.surface,
     borderRadius: 20,
     paddingHorizontal: 16,
     paddingVertical: 8,
@@ -1110,17 +1395,17 @@ const styles = StyleSheet.create({
     marginRight: 0,
   },
   timeframePillSelected: {
-    backgroundColor: '#6366f1',
+    backgroundColor: COLORS.accent,
   },
   timeframePillText: {
     fontSize: 12,
-    color: '#ffffff60',
+    color: COLORS.mutedLight,
   },
   timeframePillTextSelected: {
-    color: '#ffffff',
+    color: COLORS.text,
   },
   lifeWheelCard: {
-    backgroundColor: '#0f0f1e',
+    backgroundColor: COLORS.surface,
     borderRadius: 20,
     paddingVertical: 16,
     paddingHorizontal: 20,
@@ -1129,15 +1414,11 @@ const styles = StyleSheet.create({
   },
   lifeWheelTitle: {
     fontSize: 9,
-    letterSpacing: 2,
-    color: '#6366f1',
+    letterSpacing: 1.5,
+    color: COLORS.accent,
     textTransform: 'uppercase',
     alignSelf: 'flex-start',
-    fontFamily: Platform.select({
-      ios: 'Menlo',
-      android: 'monospace',
-      default: 'monospace',
-    }),
+    fontFamily: FONTS.bodyMedium,
   },
   lifeWheelQuestion: {
     fontSize: 14,
@@ -1145,12 +1426,12 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     marginTop: 4,
     marginBottom: 16,
-    color: '#ffffff80',
+    color: COLORS.mutedLight,
     alignSelf: 'flex-start',
   },
   lifeWheelLegend: {
     fontSize: 9,
-    color: '#ffffff30',
+    color: COLORS.muted,
     textAlign: 'center',
     marginTop: 8,
     alignSelf: 'stretch',
@@ -1173,7 +1454,7 @@ const styles = StyleSheet.create({
   },
   lifeWheelEmpty: {
     fontSize: 14,
-    color: '#ffffff55',
+    color: COLORS.muted,
     paddingVertical: 24,
   },
   whoIAmSection: {
@@ -1181,37 +1462,43 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch',
   },
   identityRow: {
-    backgroundColor: '#0f0f1e',
+    backgroundColor: COLORS.surface,
     borderRadius: 16,
     padding: 16,
     marginBottom: 10,
     borderLeftWidth: 3,
   },
+  identityAreaLabel: {
+    fontSize: 12,
+    letterSpacing: 1.5,
+    marginBottom: 8,
+    fontFamily: FONTS.bodyMedium,
+  },
   identityStatement: {
     fontSize: 15,
     fontStyle: 'italic',
     fontWeight: '300',
-    color: '#ffffff',
+    color: COLORS.text,
     marginBottom: 8,
   },
   identityEvidence: {
     fontSize: 13,
-    color: '#ffffff90',
+    color: COLORS.mutedLight,
     marginBottom: 4,
   },
   identityEvidenceCount: {
-    color: '#ffffff90',
+    color: COLORS.mutedLight,
   },
   identityEvidenceStar: {
-    color: '#6366f1',
+    color: COLORS.accent,
   },
   identityRecent: {
     fontSize: 11,
-    color: '#ffffff45',
+    color: COLORS.muted,
   },
   identityNoActivity: {
     fontSize: 11,
-    color: '#ffffff30',
+    color: COLORS.muted,
   },
   identityEmpty: {
     alignItems: 'center',
@@ -1220,14 +1507,14 @@ const styles = StyleSheet.create({
   },
   identityEmptyText: {
     fontSize: 13,
-    color: '#ffffff55',
+    color: COLORS.muted,
     textAlign: 'center',
     lineHeight: 20,
     marginBottom: 12,
   },
   identityEmptyLink: {
     fontSize: 14,
-    color: '#6366f1',
+    color: COLORS.accent,
     fontWeight: '500',
   },
   heroRow: {
@@ -1238,7 +1525,7 @@ const styles = StyleSheet.create({
   },
   heroCard: {
     flex: 1,
-    backgroundColor: '#0f0f1e',
+    backgroundColor: COLORS.surface,
     borderRadius: 16,
     padding: 16,
     marginHorizontal: 4,
@@ -1251,35 +1538,31 @@ const styles = StyleSheet.create({
   heroValue: {
     fontSize: 28,
     fontWeight: '600',
-    color: '#6366f1',
+    color: COLORS.accent,
     textAlign: 'center',
   },
   heroLabel: {
     fontSize: 11,
-    color: '#ffffff50',
+    color: COLORS.mutedLight,
     textAlign: 'center',
     marginTop: 4,
   },
   card: {
-    backgroundColor: '#0f0f1e',
+    backgroundColor: COLORS.surface,
     borderRadius: 20,
     padding: 16,
     marginBottom: 16,
   },
   sectionTitle: {
     fontSize: 9,
-    letterSpacing: 2,
-    color: '#6366f1',
+    letterSpacing: 1.5,
+    color: COLORS.accent,
     textTransform: 'uppercase',
-    fontFamily: Platform.select({
-      ios: 'Menlo',
-      android: 'monospace',
-      default: 'monospace',
-    }),
+    fontFamily: FONTS.bodyMedium,
   },
   sectionSubtitle: {
     fontSize: 12,
-    color: '#ffffff45',
+    color: COLORS.muted,
     marginTop: 4,
     marginBottom: 12,
   },
@@ -1293,7 +1576,7 @@ const styles = StyleSheet.create({
   weekLabel: {
     width: 48,
     fontSize: 9,
-    color: '#ffffff40',
+    color: COLORS.muted,
     marginRight: GAP,
   },
   heatmapSquare: {
@@ -1303,7 +1586,7 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 14,
-    color: '#ffffff55',
+    color: COLORS.muted,
     marginTop: 8,
   },
   commitmentRow: {
@@ -1320,18 +1603,18 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   commitmentTitle: {
-    color: '#ffffff',
+    color: COLORS.text,
     fontSize: 16,
     fontWeight: '500',
   },
   commitmentMeta: {
-    color: '#6366f1',
+    color: COLORS.accent,
     fontSize: 13,
     marginTop: 2,
     fontWeight: '500',
   },
   commitmentStreak: {
-    color: '#ffffff50',
+    color: COLORS.mutedLight,
     fontSize: 12,
     marginTop: 2,
   },
@@ -1344,9 +1627,9 @@ const styles = StyleSheet.create({
     marginHorizontal: -4,
   },
   areaRowSelected: {
-    backgroundColor: '#6366f118',
+    backgroundColor: COLORS.accent + '18',
     borderLeftWidth: 3,
-    borderLeftColor: '#6366f1',
+    borderLeftColor: COLORS.accent,
     paddingLeft: 8,
   },
   areaIcon: {
@@ -1366,25 +1649,116 @@ const styles = StyleSheet.create({
   },
   areaName: {
     flex: 1,
-    color: '#ffffff',
+    color: COLORS.text,
     fontSize: 14,
     fontWeight: '500',
     marginRight: 8,
   },
   areaRate: {
-    color: '#ffffff70',
+    color: COLORS.mutedLight,
     fontSize: 13,
     fontWeight: '600',
   },
   areaBarTrack: {
     height: 6,
-    backgroundColor: '#1a1a2e',
+    backgroundColor: COLORS.surface,
     borderRadius: 3,
     overflow: 'hidden',
   },
   areaBarFill: {
     height: '100%',
     borderRadius: 3,
+  },
+  dowChartRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'flex-end',
+    marginTop: 8,
+    marginBottom: 12,
+  },
+  dowBarCol: {
+    width: 32,
+    marginHorizontal: 4,
+    alignItems: 'center',
+  },
+  dowPct: {
+    fontSize: 10,
+    color: COLORS.mutedLight,
+    marginBottom: 6,
+  },
+  dowBarTrack: {
+    height: 120,
+    width: 32,
+    justifyContent: 'flex-end',
+  },
+  dowBarFill: {
+    width: 32,
+    backgroundColor: COLORS.accent,
+    borderRadius: 4,
+  },
+  dowLabel: {
+    fontSize: 10,
+    color: COLORS.mutedLight,
+    marginTop: 6,
+  },
+  dowInsight: {
+    fontSize: 12,
+    color: COLORS.muted,
+    textAlign: 'center',
+  },
+  periodCompareRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginTop: 8,
+    marginBottom: 12,
+  },
+  periodCol: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  periodColLabel: {
+    fontSize: 11,
+    color: COLORS.mutedLight,
+    marginBottom: 8,
+  },
+  periodBig: {
+    fontSize: 36,
+    fontWeight: '600',
+    color: COLORS.accent,
+  },
+  periodDelta: {
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  periodEmpty: {
+    fontSize: 14,
+    color: COLORS.muted,
+    fontStyle: 'italic',
+    marginTop: 8,
+    lineHeight: 22,
+  },
+  journalCount: {
+    fontSize: 14,
+    color: COLORS.mutedLight,
+    marginBottom: 10,
+  },
+  journalBarTrack: {
+    height: 8,
+    backgroundColor: COLORS.surface,
+    borderRadius: 4,
+    overflow: 'hidden',
+    marginBottom: 12,
+  },
+  journalBarFill: {
+    height: '100%',
+    backgroundColor: COLORS.accent,
+    borderRadius: 4,
+  },
+  journalObservation: {
+    fontSize: 13,
+    color: COLORS.muted,
+    lineHeight: 20,
   },
   legacyLink: {
     marginTop: 8,
@@ -1393,7 +1767,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   legacyLinkText: {
-    color: '#6366f1',
+    color: COLORS.accent,
     fontSize: 15,
     fontWeight: '500',
   },

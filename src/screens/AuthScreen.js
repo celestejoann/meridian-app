@@ -7,6 +7,7 @@ import {
   StyleSheet,
 } from 'react-native';
 import { supabase } from '../lib/supabase';
+import { COLORS, FONTS } from '../constants/theme';
 
 export default function AuthScreen() {
   const [email, setEmail] = useState('');
@@ -27,7 +28,7 @@ export default function AuthScreen() {
       <TextInput
         style={styles.input}
         placeholder="Email"
-        placeholderTextColor="#ffffff50"
+        placeholderTextColor={COLORS.mutedLight}
         value={email}
         onChangeText={setEmail}
         autoCapitalize="none"
@@ -36,7 +37,7 @@ export default function AuthScreen() {
       <TextInput
         style={styles.input}
         placeholder="Password"
-        placeholderTextColor="#ffffff50"
+        placeholderTextColor={COLORS.mutedLight}
         value={password}
         onChangeText={setPassword}
         secureTextEntry
@@ -52,40 +53,42 @@ export default function AuthScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#080812',
+    backgroundColor: COLORS.bg,
     justifyContent: 'center',
     padding: 24,
   },
   title: {
     fontSize: 36,
-    color: 'white',
+    color: COLORS.text,
     fontWeight: '300',
+    fontFamily: FONTS.heading,
     marginBottom: 32,
     textAlign: 'center',
   },
   input: {
-    backgroundColor: '#1a1a2e',
+    backgroundColor: COLORS.surface,
     borderWidth: 1,
-    borderColor: '#ffffff20',
+    borderColor: COLORS.borderLight,
     borderRadius: 12,
     padding: 16,
-    color: 'white',
+    color: COLORS.text,
     marginBottom: 12,
   },
   error: {
-    color: '#f87171',
+    color: COLORS.red,
     marginBottom: 12,
     fontSize: 14,
   },
   button: {
-    backgroundColor: '#6366f1',
+    backgroundColor: COLORS.accent,
     borderRadius: 12,
     padding: 16,
     alignItems: 'center',
   },
   buttonText: {
-    color: 'white',
+    color: COLORS.text,
     fontWeight: '700',
     fontSize: 16,
+    fontFamily: FONTS.bodyMedium,
   },
 });

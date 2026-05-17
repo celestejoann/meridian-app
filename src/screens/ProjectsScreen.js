@@ -12,16 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import MeridianWordmark from '../components/MeridianWordmark';
-
-const AREA_COLORS = {
-  health: '#4ade80',
-  finance: '#facc15',
-  career: '#60a5fa',
-  relationships: '#f472b6',
-  growth: '#c084fc',
-  recreation: '#fb923c',
-  spirituality: '#38bdf8',
-};
+import { COLORS, FONTS, AREA_COLORS } from '../constants/theme';
 
 const DEFAULT_AREAS = [
   'health',
@@ -53,7 +44,7 @@ function isTaskComplete(task) {
 
 function AreaPill({ area }) {
   const areaKey = (area || '').toLowerCase();
-  const color = AREA_COLORS[areaKey] || '#6366f1';
+  const color = AREA_COLORS[areaKey] || COLORS.accent;
   return (
     <View style={[styles.areaPill, { backgroundColor: color }]}>
       <Text style={styles.areaPillText}>{areaDisplayName(area)}</Text>
@@ -240,7 +231,7 @@ export default function ProjectsScreen() {
           style={{
             fontSize: 32,
             fontWeight: '300',
-            color: '#ffffff',
+            color: COLORS.text,
             paddingHorizontal: 20,
             paddingTop: 20,
             paddingBottom: 4,
@@ -251,13 +242,13 @@ export default function ProjectsScreen() {
 
         <View style={styles.titleRow}>
           <View style={styles.titleCol}>
-            <Text style={styles.headerSubtitle}>Your meaningful work</Text>
+            <Text style={styles.headerSubtitle}>Pursuits that matter</Text>
           </View>
           {!showForm ? (
             <TouchableOpacity
               style={styles.newProjectBtn}
               onPress={() => setShowForm(true)}>
-              <Text style={styles.newProjectBtnText}>+ New Project</Text>
+              <Text style={styles.newProjectBtnText}>+ Begin a pursuit</Text>
             </TouchableOpacity>
           ) : null}
         </View>
@@ -267,7 +258,7 @@ export default function ProjectsScreen() {
             <TextInput
               style={styles.input}
               placeholder="Project title"
-              placeholderTextColor="#ffffff40"
+              placeholderTextColor={COLORS.muted}
               value={title}
               onChangeText={setTitle}
             />
@@ -278,7 +269,7 @@ export default function ProjectsScreen() {
               contentContainerStyle={styles.pillRow}>
               {areaOptions.map((area) => {
                 const selected = selectedArea === area.key;
-                const color = AREA_COLORS[area.key] || '#6366f1';
+                const color = AREA_COLORS[area.key] || COLORS.accent;
                 return (
                   <TouchableOpacity
                     key={area.key}
@@ -302,8 +293,8 @@ export default function ProjectsScreen() {
             </ScrollView>
             <TextInput
               style={[styles.input, styles.inputMultiline]}
-              placeholder="Description (optional)"
-              placeholderTextColor="#ffffff40"
+              placeholder="What this is about (optional)"
+              placeholderTextColor={COLORS.muted}
               value={description}
               onChangeText={setDescription}
               multiline
@@ -321,7 +312,7 @@ export default function ProjectsScreen() {
                 onPress={handleCreateProject}
                 disabled={saving || !title.trim() || !selectedArea}>
                 <Text style={styles.createBtnText}>
-                  {saving ? 'Creating…' : 'Create Project'}
+                  {saving ? 'Beginning…' : 'Begin'}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -330,24 +321,24 @@ export default function ProjectsScreen() {
 
         {loading ? (
           <View style={styles.loaderWrap}>
-            <ActivityIndicator color="#6366f1" size={32} />
+            <ActivityIndicator color={COLORS.accent} size={32} />
           </View>
         ) : (
           <>
             {activeGoals.length === 0 && legacyGoals.length === 0 ? (
               <Text style={styles.emptyText}>
-                No active projects.{'\n'}Tap + New Project to begin your next
-                meaningful pursuit.
+                No pursuits in motion.{'\n'}Tap + Begin a pursuit to start what
+                matters next.
               </Text>
             ) : null}
 
             {activeGoals.length === 0 && (legacyGoals.length > 0 || showForm) ? (
-              <Text style={styles.sectionEmpty}>No active projects</Text>
+              <Text style={styles.sectionEmpty}>No pursuits in motion</Text>
             ) : null}
 
             {activeGoals.map((goal) => {
               const areaKey = (goal.area || '').toLowerCase();
-              const barColor = AREA_COLORS[areaKey] || '#6366f1';
+              const barColor = AREA_COLORS[areaKey] || COLORS.accent;
               const { done, total, pct } = getProgress(goal.id);
               const expanded = expandedGoalId === goal.id;
               const tasks = tasksByGoal.get(goal.id) ?? [];
@@ -381,7 +372,7 @@ export default function ProjectsScreen() {
                     </View>
                     <View style={styles.progressLabelRow}>
                       <Text style={styles.progressLabel}>
-                        {done} of {total} actions
+                        {done} moments toward this
                       </Text>
                       <Text style={styles.chevron}>
                         {expanded ? '▾' : '›'}
@@ -430,7 +421,7 @@ export default function ProjectsScreen() {
                         <TextInput
                           style={styles.addActionInput}
                           placeholder="+ Add action"
-                          placeholderTextColor="#ffffff40"
+                          placeholderTextColor={COLORS.muted}
                           value={
                             addingActionFor === goal.id ? newActionTitle : ''
                           }
@@ -477,7 +468,7 @@ export default function ProjectsScreen() {
                           </Text>
                           <AreaPill area={goal.area} />
                           <Text style={styles.progressLabel}>
-                            {done} of {total} actions completed
+                            {done} moments toward this
                           </Text>
                         </View>
                       );
@@ -495,7 +486,7 @@ export default function ProjectsScreen() {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: '#080812',
+    backgroundColor: COLORS.bg,
   },
   scroll: {
     flex: 1,
@@ -517,38 +508,38 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 32,
     fontWeight: '300',
-    color: '#ffffff',
+    color: COLORS.text,
   },
   headerSubtitle: {
     fontSize: 14,
-    color: '#ffffff55',
+    color: COLORS.muted,
     marginTop: 6,
   },
   newProjectBtn: {
-    backgroundColor: '#6366f1',
+    backgroundColor: COLORS.accent,
     borderRadius: 999,
     paddingHorizontal: 14,
     paddingVertical: 10,
     marginTop: 6,
   },
   newProjectBtnText: {
-    color: '#ffffff',
+    color: COLORS.text,
     fontSize: 13,
     fontWeight: '600',
   },
   formCard: {
-    backgroundColor: '#0f0f1e',
+    backgroundColor: COLORS.surface,
     borderRadius: 20,
     padding: 16,
     marginBottom: 16,
   },
   input: {
-    backgroundColor: '#1a1a2e',
-    color: '#ffffff',
+    backgroundColor: COLORS.surface,
+    color: COLORS.text,
     borderRadius: 12,
     padding: 12,
     borderWidth: 1,
-    borderColor: '#ffffff15',
+    borderColor: COLORS.borderLight,
     fontSize: 15,
     marginBottom: 12,
   },
@@ -557,7 +548,7 @@ const styles = StyleSheet.create({
   },
   fieldLabel: {
     fontSize: 11,
-    color: '#ffffff55',
+    color: COLORS.muted,
     marginBottom: 8,
     textTransform: 'uppercase',
     letterSpacing: 1,
@@ -575,15 +566,15 @@ const styles = StyleSheet.create({
   },
   areaPillBtnText: {
     fontSize: 13,
-    color: '#ffffff90',
+    color: COLORS.mutedLight,
     fontWeight: '600',
   },
   areaPillBtnTextSelected: {
-    color: '#080812',
+    color: COLORS.bg,
   },
   pillOutline: {
-    backgroundColor: '#ffffff15',
-    borderColor: '#ffffff20',
+    backgroundColor: COLORS.borderLight,
+    borderColor: COLORS.borderLight,
   },
   formActions: {
     flexDirection: 'row',
@@ -595,11 +586,11 @@ const styles = StyleSheet.create({
     padding: 14,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#ffffff20',
+    borderColor: COLORS.borderLight,
     alignItems: 'center',
   },
   cancelBtnText: {
-    color: '#ffffff80',
+    color: COLORS.mutedLight,
     fontSize: 15,
     fontWeight: '500',
   },
@@ -607,14 +598,14 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 14,
     borderRadius: 12,
-    backgroundColor: '#6366f1',
+    backgroundColor: COLORS.accent,
     alignItems: 'center',
   },
   createBtnDisabled: {
     opacity: 0.6,
   },
   createBtnText: {
-    color: '#ffffff',
+    color: COLORS.text,
     fontSize: 15,
     fontWeight: '600',
   },
@@ -624,7 +615,7 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 14,
-    color: '#ffffff55',
+    color: COLORS.muted,
     lineHeight: 22,
     textAlign: 'center',
     marginTop: 24,
@@ -632,11 +623,11 @@ const styles = StyleSheet.create({
   },
   sectionEmpty: {
     fontSize: 14,
-    color: '#ffffff45',
+    color: COLORS.muted,
     marginBottom: 16,
   },
   projectCard: {
-    backgroundColor: '#0f0f1e',
+    backgroundColor: COLORS.surface,
     borderRadius: 20,
     padding: 16,
     marginBottom: 12,
@@ -645,12 +636,12 @@ const styles = StyleSheet.create({
     opacity: 0.65,
   },
   projectTitle: {
-    color: '#ffffff',
+    color: COLORS.text,
     fontSize: 17,
     fontWeight: '500',
   },
   projectTitleMuted: {
-    color: '#ffffff90',
+    color: COLORS.mutedLight,
     fontSize: 17,
     fontWeight: '500',
     marginBottom: 8,
@@ -665,19 +656,19 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   areaPillText: {
-    color: '#080812',
+    color: COLORS.bg,
     fontSize: 11,
     fontWeight: '700',
   },
   projectDesc: {
     marginTop: 8,
     fontSize: 13,
-    color: '#ffffff50',
+    color: COLORS.mutedLight,
   },
   progressTrack: {
     height: 4,
     borderRadius: 2,
-    backgroundColor: '#1a1a2e',
+    backgroundColor: COLORS.surface,
     marginTop: 12,
     overflow: 'hidden',
   },
@@ -693,21 +684,21 @@ const styles = StyleSheet.create({
   },
   progressLabel: {
     fontSize: 12,
-    color: '#ffffff45',
+    color: COLORS.muted,
   },
   chevron: {
     fontSize: 18,
-    color: '#ffffff40',
+    color: COLORS.muted,
   },
   expandedSection: {
     marginTop: 14,
     paddingTop: 14,
     borderTopWidth: 1,
-    borderTopColor: '#ffffff08',
+    borderTopColor: COLORS.border,
   },
   noTasks: {
     fontSize: 13,
-    color: '#ffffff45',
+    color: COLORS.muted,
     marginBottom: 12,
   },
   taskRow: {
@@ -720,18 +711,18 @@ const styles = StyleSheet.create({
     height: 22,
     borderRadius: 6,
     borderWidth: 2,
-    borderColor: '#ffffff35',
+    borderColor: COLORS.borderLight,
     marginRight: 10,
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 2,
   },
   taskCheckOn: {
-    backgroundColor: '#4ade80',
-    borderColor: '#4ade80',
+    backgroundColor: COLORS.green,
+    borderColor: COLORS.green,
   },
   taskCheckMark: {
-    color: '#ffffff',
+    color: COLORS.text,
     fontSize: 12,
     fontWeight: '700',
   },
@@ -740,7 +731,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   taskTitle: {
-    color: '#ffffff',
+    color: COLORS.text,
     fontSize: 15,
   },
   taskTitleDone: {
@@ -750,7 +741,7 @@ const styles = StyleSheet.create({
   taskDue: {
     marginTop: 2,
     fontSize: 12,
-    color: '#ffffff45',
+    color: COLORS.muted,
   },
   addActionRow: {
     flexDirection: 'row',
@@ -760,12 +751,12 @@ const styles = StyleSheet.create({
   },
   addActionInput: {
     flex: 1,
-    backgroundColor: '#1a1a2e',
-    color: '#ffffff',
+    backgroundColor: COLORS.surface,
+    color: COLORS.text,
     borderRadius: 10,
     padding: 10,
     borderWidth: 1,
-    borderColor: '#ffffff15',
+    borderColor: COLORS.borderLight,
     fontSize: 14,
   },
   addActionBtn: {
@@ -773,7 +764,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   addActionBtnText: {
-    color: '#6366f1',
+    color: COLORS.accent,
     fontSize: 14,
     fontWeight: '600',
   },
@@ -788,11 +779,11 @@ const styles = StyleSheet.create({
   legacyHeaderText: {
     fontSize: 9,
     letterSpacing: 2,
-    color: '#6366f1',
+    color: COLORS.accent,
     textTransform: 'uppercase',
   },
   legacyChevron: {
-    color: '#ffffff50',
+    color: COLORS.mutedLight,
     fontSize: 14,
   },
 });

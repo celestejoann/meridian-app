@@ -1,7 +1,6 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -10,23 +9,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
-import { useFonts } from 'expo-font';
-import {
-  PlayfairDisplay_400Regular,
-  PlayfairDisplay_700Bold,
-  PlayfairDisplay_300Light,
-} from '@expo-google-fonts/playfair-display';
+import { COLORS, FONTS, AREA_COLORS } from '../constants/theme';
 import { supabase } from '../lib/supabase';
-
-const AREA_COLORS = {
-  health: '#4ade80',
-  finance: '#facc15',
-  career: '#60a5fa',
-  relationships: '#f472b6',
-  growth: '#c084fc',
-  recreation: '#fb923c',
-  spirituality: '#38bdf8',
-};
 
 const DAY_NAMES = [
   'Sunday',
@@ -148,34 +132,42 @@ function headerDateLabel(d) {
 
 function getAreaColor(area) {
   const key = (area || '').toLowerCase();
-  return AREA_COLORS[key] || '#6366f1';
+  return AREA_COLORS[key] || COLORS.accent;
 }
 
 function getStreakHeroState(todayRate) {
   const hour = new Date().getHours();
   const isAfterSixPM = hour >= 18;
 
+  if (todayRate === 0) {
+    return {
+      color: COLORS.gold,
+      border: COLORS.gold,
+      status: 'How will you show up today?',
+      statusColor: COLORS.gold,
+    };
+  }
   if (todayRate >= 0.5) {
     return {
-      color: '#4ade80',
-      border: '#4ade80',
-      status: 'Streak extended ✦',
-      statusColor: '#4ade80',
+      color: COLORS.green,
+      border: COLORS.green,
+      status: "You're still showing up ✦",
+      statusColor: COLORS.green,
     };
   }
   if (isAfterSixPM) {
     return {
-      color: '#f87171',
-      border: '#f87171',
-      status: '⏰ Ends at midnight',
-      statusColor: '#f87171',
+      color: COLORS.red,
+      border: COLORS.red,
+      status: '⏰ Today is still here',
+      statusColor: COLORS.red,
     };
   }
   return {
-    color: '#facc15',
-    border: '#facc15',
-    status: '⏰ Complete today to keep it alive',
-    statusColor: '#facc15',
+    color: COLORS.gold,
+    border: COLORS.gold,
+    status: 'Show up for your commitments today',
+    statusColor: COLORS.gold,
   };
 }
 
@@ -203,7 +195,7 @@ function HabitRow({
   variant = 'due',
 }) {
   const areaKey = (habit.area || '').toLowerCase();
-  const tagColor = AREA_COLORS[areaKey] || '#ffffff40';
+  const tagColor = AREA_COLORS[areaKey] || COLORS.muted;
   const done = completionType != null;
   const isCompleted = completionType === 'completed';
   const isLifeHappens = completionType === 'life_happens';
@@ -290,12 +282,6 @@ function HabitRow({
 }
 
 export default function DashboardScreen() {
-  const [fontsLoaded] = useFonts({
-    PlayfairDisplay_400Regular,
-    PlayfairDisplay_700Bold,
-    PlayfairDisplay_300Light,
-  });
-
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState(null);
   const [habits, setHabits] = useState([]);
@@ -648,7 +634,7 @@ export default function DashboardScreen() {
         <Text
           style={[
             styles.headerTitle,
-            fontsLoaded && styles.headerTitleFont,
+            styles.headerTitleFont,
           ]}>
           Today
         </Text>
@@ -656,7 +642,7 @@ export default function DashboardScreen() {
 
         {loading ? (
           <View style={styles.loaderWrap}>
-            <ActivityIndicator color="#6366f1" size={32} />
+            <ActivityIndicator color={COLORS.accent} size={32} />
           </View>
         ) : (
           <>
@@ -686,11 +672,12 @@ export default function DashboardScreen() {
                 </Text>
                 {bestStreak > 0 ? (
                   <Text style={styles.streakMetaLine}>
-                    Best: {bestStreak} days
+                    Longest stretch: {bestStreak} days
                   </Text>
                 ) : null}
                 <Text style={styles.streakMetaLine}>
-                  Today: {todayPct}%
+                  Today: {todayCompletionsCount} of {habitsForTodayRate.length}{' '}
+                  shown up
                 </Text>
               </View>
             </View>
@@ -730,14 +717,14 @@ export default function DashboardScreen() {
               <Text
                 style={[
                   styles.playfairSectionHeading,
-                  fontsLoaded && styles.playfairSectionHeadingFont,
+                  styles.playfairSectionHeadingFont,
                 ]}>
                 Today&apos;s commitments
               </Text>
               <Text style={styles.sectionTitle}>DUE TODAY</Text>
               {dueToday.length > 0 ? (
                 <Text style={styles.dueCount}>
-                  {dueTodayDoneCount} of {dueToday.length} due today
+                  {dueTodayDoneCount} of {dueToday.length} to show up for
                 </Text>
               ) : null}
               {dueToday.length === 0 ? (
@@ -765,7 +752,7 @@ export default function DashboardScreen() {
                 <Text
                   style={[
                     styles.playfairSectionHeading,
-                    fontsLoaded && styles.playfairSectionHeadingFont,
+                    styles.playfairSectionHeadingFont,
                   ]}>
                   Today&apos;s actions
                 </Text>
@@ -796,7 +783,7 @@ export default function DashboardScreen() {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: '#080812',
+    backgroundColor: COLORS.bg,
   },
   scroll: {
     flex: 1,
@@ -808,52 +795,44 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 36,
     fontWeight: '300',
-    color: '#ffffff',
+    color: COLORS.text,
     marginTop: 8,
   },
   headerTitleFont: {
-    fontFamily: 'PlayfairDisplay_300Light',
+    fontFamily: FONTS.heading,
   },
   headerDate: {
     marginTop: 6,
     fontSize: 14,
-    color: '#ffffff60',
+    color: COLORS.mutedLight,
     marginBottom: 20,
-    fontFamily: Platform.select({
-      ios: 'Menlo',
-      android: 'monospace',
-      default: 'monospace',
-    }),
+    fontFamily: FONTS.body,
   },
   playfairSectionHeading: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#ffffff',
+    color: COLORS.text,
     marginBottom: 12,
   },
   playfairSectionHeadingFont: {
-    fontFamily: 'PlayfairDisplay_700Bold',
+    fontFamily: FONTS.headingBold,
   },
   whoIAmSection: {
     marginBottom: 16,
   },
   whoIAmTitle: {
     fontSize: 9,
-    letterSpacing: 2,
-    color: '#6366f1',
+    letterSpacing: 1.5,
+    color: COLORS.accent,
     textTransform: 'uppercase',
     marginBottom: 12,
-    fontFamily: Platform.select({
-      ios: 'Menlo',
-      android: 'monospace',
-      default: 'monospace',
-    }),
+    fontFamily: FONTS.bodyMedium,
   },
   identityScrollContent: {
     paddingRight: 8,
   },
   identityCard: {
-    backgroundColor: '#0f0f1e',
+    backgroundColor: COLORS.surface,
     borderRadius: 16,
     padding: 16,
     marginRight: 12,
@@ -864,15 +843,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
     letterSpacing: 1,
     marginBottom: 8,
-    fontFamily: Platform.select({
-      ios: 'Menlo',
-      android: 'monospace',
-      default: 'monospace',
-    }),
+    fontFamily: FONTS.body,
   },
   identityStatement: {
     fontSize: 13,
-    color: '#ffffff',
+    color: COLORS.text,
     fontStyle: 'italic',
     fontWeight: '300',
     lineHeight: 20,
@@ -882,7 +857,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   card: {
-    backgroundColor: '#0f0f1e',
+    backgroundColor: COLORS.surface,
     borderRadius: 20,
     padding: 20,
     marginBottom: 16,
@@ -894,7 +869,7 @@ const styles = StyleSheet.create({
     padding: 20,
     borderRadius: 20,
     borderLeftWidth: 3,
-    backgroundColor: '#0f0f1e',
+    backgroundColor: COLORS.surface,
     marginBottom: 16,
     overflow: 'hidden',
   },
@@ -915,7 +890,7 @@ const styles = StyleSheet.create({
   },
   streakDaysLabel: {
     fontSize: 16,
-    color: '#ffffff60',
+    color: COLORS.mutedLight,
     alignSelf: 'flex-end',
     paddingBottom: 8,
   },
@@ -925,40 +900,28 @@ const styles = StyleSheet.create({
   },
   streakMetaLine: {
     fontSize: 11,
-    color: '#ffffff40',
+    color: COLORS.muted,
     marginTop: 4,
   },
   sectionTitle: {
     fontSize: 9,
-    letterSpacing: 2,
-    color: '#6366f1',
+    letterSpacing: 1.5,
+    color: COLORS.accent,
     textTransform: 'uppercase',
     marginBottom: 4,
-    fontFamily: Platform.select({
-      ios: 'Menlo',
-      android: 'monospace',
-      default: 'monospace',
-    }),
+    fontFamily: FONTS.bodyMedium,
   },
   dueCount: {
     fontSize: 13,
-    color: '#ffffff50',
+    color: COLORS.mutedLight,
     marginBottom: 16,
-    fontFamily: Platform.select({
-      ios: 'Menlo',
-      android: 'monospace',
-      default: 'monospace',
-    }),
+    fontFamily: FONTS.body,
   },
   emptyText: {
     fontSize: 15,
-    color: '#ffffff55',
+    color: COLORS.muted,
     marginTop: 12,
-    fontFamily: Platform.select({
-      ios: 'Menlo',
-      android: 'monospace',
-      default: 'monospace',
-    }),
+    fontFamily: FONTS.body,
   },
   row: {
     flexDirection: 'row',
@@ -971,8 +934,8 @@ const styles = StyleSheet.create({
   },
   rowCompleted: {
     borderLeftWidth: 3,
-    borderLeftColor: '#4ade80',
-    backgroundColor: '#4ade8008',
+    borderLeftColor: COLORS.green,
+    backgroundColor: COLORS.green + '08',
   },
   rowWeek: {
     paddingVertical: 10,
@@ -982,17 +945,17 @@ const styles = StyleSheet.create({
     height: 26,
     borderRadius: 8,
     borderWidth: 2,
-    borderColor: '#ffffff35',
+    borderColor: COLORS.borderLight,
     marginRight: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
   checkboxOn: {
-    backgroundColor: '#4ade80',
-    borderColor: '#4ade80',
+    backgroundColor: COLORS.green,
+    borderColor: COLORS.green,
   },
   checkMark: {
-    color: '#ffffff',
+    color: COLORS.text,
     fontSize: 14,
     fontWeight: '700',
   },
@@ -1008,7 +971,7 @@ const styles = StyleSheet.create({
   lifeHappensBtn: {
     marginTop: 4,
     fontSize: 12,
-    color: '#a78bfa',
+    color: COLORS.accent,
   },
   weekDotBtn: {
     width: 28,
@@ -1018,24 +981,24 @@ const styles = StyleSheet.create({
   },
   weekDot: {
     fontSize: 18,
-    color: '#ffffff35',
+    color: COLORS.borderLight,
   },
   weekDotDone: {
-    color: '#4ade80',
+    color: COLORS.green,
   },
   habitTextCol: {
     flex: 1,
     minWidth: 0,
   },
   habitTitle: {
-    color: '#ffffff',
+    color: COLORS.text,
     fontSize: 16,
   },
   habitTitleDone: {
     opacity: 0.55,
   },
   habitSubtitle: {
-    color: '#ffffff55',
+    color: COLORS.muted,
     fontSize: 13,
     marginTop: 2,
   },
@@ -1047,7 +1010,7 @@ const styles = StyleSheet.create({
     maxWidth: 120,
   },
   areaPillText: {
-    color: '#080812',
+    color: COLORS.bg,
     fontSize: 11,
     fontWeight: '700',
   },

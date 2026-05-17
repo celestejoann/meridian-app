@@ -15,16 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import MeridianWordmark from '../components/MeridianWordmark';
-
-const AREA_COLORS = {
-  health: '#4ade80',
-  finance: '#facc15',
-  career: '#60a5fa',
-  relationships: '#f472b6',
-  growth: '#c084fc',
-  recreation: '#fb923c',
-  spirituality: '#38bdf8',
-};
+import { COLORS, FONTS, AREA_COLORS } from '../constants/theme';
 
 const DEFAULT_AREAS = [
   'health',
@@ -108,11 +99,11 @@ function frequencyLabel(habit) {
         habit.weekly_due_day != null
           ? habit.weekly_due_day
           : new Date(habit.created_at).getDay();
-      return `Every ${DAY_NAMES_FULL[dow]}`;
+      return `On ${DAY_NAMES_FULL[dow]}s`;
     }
     case 'xperweek': {
       const n = habit.frequency_count ?? 3;
-      return `${n}× per week`;
+      return `${n}× a week`;
     }
     default:
       return 'Daily';
@@ -289,7 +280,7 @@ export default function CommitmentsScreen() {
           style={{
             fontSize: 32,
             fontWeight: '300',
-            color: '#ffffff',
+            color: COLORS.text,
             paddingHorizontal: 20,
             paddingTop: 20,
             paddingBottom: 4,
@@ -297,13 +288,13 @@ export default function CommitmentsScreen() {
           Commitments
         </Text>
         <MeridianWordmark />
-        <Text style={styles.headerSubtitle}>Your daily practice</Text>
+        <Text style={styles.headerSubtitle}>What you&apos;ve committed to</Text>
 
         <View style={styles.formCard}>
           <TextInput
             style={styles.input}
             placeholder="New commitment..."
-            placeholderTextColor="#ffffff40"
+            placeholderTextColor={COLORS.muted}
             value={title}
             onChangeText={setTitle}
           />
@@ -315,7 +306,7 @@ export default function CommitmentsScreen() {
             contentContainerStyle={styles.pillRow}>
             {areaOptions.map((area) => {
               const selected = selectedArea === area.key;
-              const color = AREA_COLORS[area.key] || '#6366f1';
+              const color = AREA_COLORS[area.key] || COLORS.accent;
               return (
                 <TouchableOpacity
                   key={area.key}
@@ -423,7 +414,7 @@ export default function CommitmentsScreen() {
           <TextInput
             style={styles.input}
             placeholder="After I..."
-            placeholderTextColor="#ffffff40"
+            placeholderTextColor={COLORS.muted}
             value={anchor}
             onChangeText={setAnchor}
           />
@@ -433,14 +424,14 @@ export default function CommitmentsScreen() {
             onPress={handleAdd}
             disabled={saving || !title.trim() || !selectedArea}>
             <Text style={styles.addBtnText}>
-              {saving ? 'Adding…' : 'Add'}
+              {saving ? 'Adding…' : 'Add to my practice'}
             </Text>
           </TouchableOpacity>
         </View>
 
         {loading ? (
           <View style={styles.loaderWrap}>
-            <ActivityIndicator color="#6366f1" size={32} />
+            <ActivityIndicator color={COLORS.accent} size={32} />
           </View>
         ) : (
           <>
@@ -451,13 +442,15 @@ export default function CommitmentsScreen() {
               </Text>
             ) : null}
 
-            <SectionTitle>ACTIVE</SectionTitle>
+            <SectionTitle>SHOWING UP FOR</SectionTitle>
             {activeHabits.length === 0 ? (
-              <Text style={styles.sectionEmpty}>No active commitments</Text>
+              <Text style={styles.sectionEmpty}>
+                Nothing you&apos;re showing up for yet
+              </Text>
             ) : (
               activeHabits.map((habit) => {
                 const areaKey = (habit.area || '').toLowerCase();
-                const barColor = AREA_COLORS[areaKey] || '#6366f1';
+                const barColor = AREA_COLORS[areaKey] || COLORS.accent;
                 const streak = computeHabitStreak(
                   habit.id,
                   completions,
@@ -484,7 +477,7 @@ export default function CommitmentsScreen() {
                         <Text style={styles.menuBtnText}>⋯</Text>
                       </TouchableOpacity>
                       <Text style={styles.streakText}>🔥 {streak}</Text>
-                      <Text style={styles.streakLabel}>streak</Text>
+                      <Text style={styles.streakLabel}>in a row</Text>
                     </View>
                   </View>
                 );
@@ -497,7 +490,7 @@ export default function CommitmentsScreen() {
                   style={styles.archivedHeader}
                   onPress={() => setArchivedExpanded((v) => !v)}>
                   <Text style={styles.archivedHeaderText}>
-                    ARCHIVED ({archivedHabits.length})
+                    NO LONGER IN PRACTICE ({archivedHabits.length})
                   </Text>
                   <Text style={styles.archivedChevron}>
                     {archivedExpanded ? '▾' : '▸'}
@@ -506,7 +499,7 @@ export default function CommitmentsScreen() {
                 {archivedExpanded
                   ? archivedHabits.map((habit) => {
                       const areaKey = (habit.area || '').toLowerCase();
-                      const barColor = AREA_COLORS[areaKey] || '#6366f1';
+                      const barColor = AREA_COLORS[areaKey] || COLORS.accent;
                       return (
                         <View
                           key={habit.id}
@@ -572,7 +565,7 @@ export default function CommitmentsScreen() {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: '#080812',
+    backgroundColor: COLORS.bg,
   },
   scroll: {
     flex: 1,
@@ -584,34 +577,34 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 32,
     fontWeight: '300',
-    color: '#ffffff',
+    color: COLORS.text,
     marginTop: 8,
   },
   headerSubtitle: {
     fontSize: 14,
-    color: '#ffffff55',
+    color: COLORS.muted,
     marginTop: 6,
     marginBottom: 16,
   },
   formCard: {
-    backgroundColor: '#0f0f1e',
+    backgroundColor: COLORS.surface,
     borderRadius: 20,
     padding: 16,
     marginBottom: 16,
   },
   input: {
-    backgroundColor: '#1a1a2e',
-    color: '#ffffff',
+    backgroundColor: COLORS.surface,
+    color: COLORS.text,
     borderRadius: 12,
     padding: 12,
     borderWidth: 1,
-    borderColor: '#ffffff15',
+    borderColor: COLORS.borderLight,
     fontSize: 15,
     marginBottom: 12,
   },
   fieldLabel: {
     fontSize: 11,
-    color: '#ffffff55',
+    color: COLORS.muted,
     marginBottom: 8,
     textTransform: 'uppercase',
     letterSpacing: 1,
@@ -629,15 +622,15 @@ const styles = StyleSheet.create({
   },
   areaPillText: {
     fontSize: 13,
-    color: '#ffffff90',
+    color: COLORS.mutedLight,
     fontWeight: '600',
   },
   areaPillTextSelected: {
-    color: '#080812',
+    color: COLORS.bg,
   },
   pillOutline: {
-    backgroundColor: '#ffffff15',
-    borderColor: '#ffffff20',
+    backgroundColor: COLORS.borderLight,
+    borderColor: COLORS.borderLight,
   },
   freqPill: {
     borderRadius: 20,
@@ -647,16 +640,16 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   freqPillSelected: {
-    backgroundColor: '#6366f1',
-    borderColor: '#6366f1',
+    backgroundColor: COLORS.accent,
+    borderColor: COLORS.accent,
   },
   freqPillText: {
     fontSize: 13,
-    color: '#ffffff90',
+    color: COLORS.mutedLight,
     fontWeight: '500',
   },
   freqPillTextSelected: {
-    color: '#ffffff',
+    color: COLORS.text,
     fontWeight: '600',
   },
   stepperRow: {
@@ -669,26 +662,26 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: '#1a1a2e',
+    backgroundColor: COLORS.surface,
     borderWidth: 1,
-    borderColor: '#ffffff15',
+    borderColor: COLORS.borderLight,
     alignItems: 'center',
     justifyContent: 'center',
   },
   stepperBtnText: {
-    color: '#ffffff',
+    color: COLORS.text,
     fontSize: 20,
     fontWeight: '300',
   },
   stepperValue: {
-    color: '#ffffff',
+    color: COLORS.text,
     fontSize: 18,
     fontWeight: '600',
     minWidth: 24,
     textAlign: 'center',
   },
   addBtn: {
-    backgroundColor: '#6366f1',
+    backgroundColor: COLORS.accent,
     borderRadius: 12,
     padding: 16,
     alignItems: 'center',
@@ -698,7 +691,7 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   addBtnText: {
-    color: '#ffffff',
+    color: COLORS.text,
     fontSize: 16,
     fontWeight: '600',
   },
@@ -709,19 +702,16 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 9,
     letterSpacing: 2,
-    color: '#6366f1',
+    color: COLORS.accent,
     textTransform: 'uppercase',
     marginBottom: 12,
     marginTop: 8,
-    fontFamily: Platform.select({
-      ios: 'Menlo',
-      android: 'monospace',
-      default: 'monospace',
-    }),
+    fontFamily: FONTS.bodyMedium,
+    letterSpacing: 1.5,
   },
   emptyText: {
     fontSize: 14,
-    color: '#ffffff55',
+    color: COLORS.muted,
     lineHeight: 22,
     textAlign: 'center',
     marginBottom: 24,
@@ -729,11 +719,11 @@ const styles = StyleSheet.create({
   },
   sectionEmpty: {
     fontSize: 14,
-    color: '#ffffff45',
+    color: COLORS.muted,
     marginBottom: 16,
   },
   commitmentCard: {
-    backgroundColor: '#0f0f1e',
+    backgroundColor: COLORS.surface,
     borderRadius: 16,
     marginBottom: 8,
     overflow: 'hidden',
@@ -752,18 +742,18 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   commitmentTitle: {
-    color: '#ffffff',
+    color: COLORS.text,
     fontSize: 16,
     fontWeight: '500',
   },
   archivedTitle: {
-    color: '#ffffff90',
+    color: COLORS.mutedLight,
     fontSize: 16,
     fontWeight: '500',
   },
   commitmentMeta: {
     marginTop: 8,
-    color: '#ffffff50',
+    color: COLORS.mutedLight,
     fontSize: 12,
   },
   commitmentRight: {
@@ -776,17 +766,17 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   menuBtnText: {
-    color: '#ffffff60',
+    color: COLORS.mutedLight,
     fontSize: 20,
     fontWeight: '700',
   },
   streakText: {
-    color: '#ffffff',
+    color: COLORS.text,
     fontSize: 15,
     fontWeight: '600',
   },
   streakLabel: {
-    color: '#ffffff45',
+    color: COLORS.muted,
     fontSize: 10,
     marginTop: 2,
   },
@@ -801,16 +791,13 @@ const styles = StyleSheet.create({
   archivedHeaderText: {
     fontSize: 9,
     letterSpacing: 2,
-    color: '#6366f1',
+    color: COLORS.accent,
     textTransform: 'uppercase',
-    fontFamily: Platform.select({
-      ios: 'Menlo',
-      android: 'monospace',
-      default: 'monospace',
-    }),
+    fontFamily: FONTS.bodyMedium,
+    letterSpacing: 1.5,
   },
   archivedChevron: {
-    color: '#ffffff50',
+    color: COLORS.mutedLight,
     fontSize: 14,
   },
   modalBackdrop: {
@@ -820,24 +807,24 @@ const styles = StyleSheet.create({
     padding: 24,
   },
   menuSheet: {
-    backgroundColor: '#0f0f1e',
+    backgroundColor: COLORS.surface,
     borderRadius: 16,
     overflow: 'hidden',
   },
   menuItem: {
     padding: 18,
     borderBottomWidth: 1,
-    borderBottomColor: '#ffffff08',
+    borderBottomColor: COLORS.border,
   },
   menuItemLast: {
     borderBottomWidth: 0,
   },
   menuItemText: {
-    color: '#ffffff',
+    color: COLORS.text,
     fontSize: 16,
     textAlign: 'center',
   },
   menuItemDanger: {
-    color: '#f87171',
+    color: COLORS.red,
   },
 });

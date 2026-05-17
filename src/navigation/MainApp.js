@@ -1,12 +1,12 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
-  Platform,
   Pressable,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { COLORS, FONTS } from '../constants/theme';
 import PagerView from 'react-native-pager-view';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -131,7 +131,7 @@ export default function MainApp() {
                   style={[
                     styles.topTabBtn,
                     {
-                      borderBottomColor: active ? '#6366f1' : 'transparent',
+                      borderBottomColor: active ? COLORS.accent : 'transparent',
                     },
                   ]}
                   onPress={() => selectTopTab(index)}
@@ -139,7 +139,7 @@ export default function MainApp() {
                   <Text
                     style={[
                       styles.topTabLabel,
-                      { color: active ? '#ffffff' : '#ffffff40' },
+                      { color: active ? COLORS.text : COLORS.muted },
                     ]}>
                     {tab.label}
                   </Text>
@@ -183,12 +183,12 @@ export default function MainApp() {
                 <Ionicons
                   name={active ? tab.icon : tab.iconOutline}
                   size={24}
-                  color={active ? '#6366f1' : '#ffffff40'}
+                  color={active ? COLORS.accent : COLORS.muted}
                 />
                 <Text
                   style={[
                     styles.bottomTabLabel,
-                    { color: active ? '#6366f1' : '#ffffff40' },
+                    { color: active ? COLORS.accent : COLORS.muted },
                   ]}>
                   {tab.label}
                 </Text>
@@ -204,13 +204,13 @@ export default function MainApp() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#080812',
+    backgroundColor: COLORS.bg,
   },
   topBar: {
-    backgroundColor: '#080812',
+    backgroundColor: COLORS.bg,
     paddingHorizontal: 20,
     borderBottomWidth: 1,
-    borderBottomColor: '#ffffff10',
+    borderBottomColor: COLORS.border,
     paddingBottom: 0,
   },
   brandingRow: {
@@ -224,13 +224,14 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   brandName: {
+    fontFamily: 'PlayfairDisplay_700Bold',
     fontSize: 24,
-    fontWeight: '700',
-    color: '#ffffff',
+    color: COLORS.text,
   },
   brandTagline: {
+    fontFamily: 'DMSans_500Medium',
     fontSize: 9,
-    color: '#6366f1',
+    color: COLORS.accent,
     letterSpacing: 3,
   },
   topTabsRow: {
@@ -248,6 +249,7 @@ const styles = StyleSheet.create({
   topTabLabel: {
     fontSize: 16,
     fontWeight: '600',
+    fontFamily: FONTS.bodyMedium,
   },
   content: {
     flex: 1,
@@ -266,18 +268,19 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   legacyBackText: {
-    color: '#6366f1',
+    color: COLORS.accent,
     fontSize: 15,
     fontWeight: '500',
+    fontFamily: FONTS.bodyMedium,
   },
   legacyContent: {
     flex: 1,
   },
   bottomBar: {
     flexDirection: 'row',
-    backgroundColor: '#0d0d1f',
+    backgroundColor: COLORS.bg,
     borderTopWidth: 1,
-    borderTopColor: '#ffffff10',
+    borderTopColor: COLORS.border,
     paddingTop: 8,
     paddingHorizontal: 4,
   },
@@ -291,10 +294,6 @@ const styles = StyleSheet.create({
     fontSize: 10,
     marginTop: 2,
     marginBottom: 4,
-    fontFamily: Platform.select({
-      ios: 'Menlo',
-      android: 'monospace',
-      default: 'monospace',
-    }),
+    fontFamily: FONTS.body,
   },
 });

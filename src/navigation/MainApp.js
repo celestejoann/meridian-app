@@ -13,10 +13,9 @@ import { Ionicons } from '@expo/vector-icons';
 import Svg, { Polygon, Line, Defs, LinearGradient, Stop } from 'react-native-svg';
 import DashboardScreen from '../screens/DashboardScreen';
 import JournalScreen from '../screens/JournalScreen';
-import CommitmentsScreen from '../screens/CommitmentsScreen';
-import ProjectsScreen from '../screens/ProjectsScreen';
 import InsightsScreen from '../screens/InsightsScreen';
 import SettingsScreen from '../screens/SettingsScreen';
+import MyLifeScreen from '../screens/MyLifeScreen';
 import LegacyScreen from '../screens/LegacyScreen';
 import { AppNavigationContext } from './AppNavigationContext';
 
@@ -26,10 +25,8 @@ const TOP_TABS = [
 ];
 
 const BOTTOM_TABS = [
-  { key: 'commitments', label: 'Commitments', icon: 'list', iconOutline: 'list-outline' },
-  { key: 'projects', label: 'Projects', icon: 'folder', iconOutline: 'folder-outline' },
+  { key: 'mylife', label: 'My Life', icon: 'layers', iconOutline: 'layers-outline' },
   { key: 'insights', label: 'Insights', icon: 'bar-chart', iconOutline: 'bar-chart-outline' },
-  { key: 'legacy', label: 'Legacy', icon: 'trophy', iconOutline: 'trophy-outline' },
   { key: 'settings', label: 'Settings', icon: 'settings', iconOutline: 'settings-outline' },
 ];
 
@@ -45,13 +42,17 @@ export default function MainApp() {
     setBottomTab('legacy');
   }, []);
 
+  const openInsights = useCallback(() => {
+    setBottomTab('insights');
+  }, []);
+
   const openSettings = useCallback(() => {
     setBottomTab('settings');
   }, []);
 
   const navContext = useMemo(
-    () => ({ openLegacy, openSettings }),
-    [openLegacy, openSettings]
+    () => ({ openLegacy, openInsights, openSettings }),
+    [openLegacy, openInsights, openSettings]
   );
 
   const selectTopTab = useCallback((index) => {
@@ -72,16 +73,14 @@ export default function MainApp() {
 
   const renderBottomContent = () => {
     switch (bottomTab) {
-      case 'commitments':
-        return <CommitmentsScreen />;
-      case 'projects':
-        return <ProjectsScreen />;
+      case 'mylife':
+        return <MyLifeScreen />;
       case 'insights':
         return <InsightsScreen />;
-      case 'legacy':
-        return <LegacyScreen />;
       case 'settings':
         return <SettingsScreen />;
+      case 'legacy':
+        return <LegacyScreen />;
       default:
         return null;
     }

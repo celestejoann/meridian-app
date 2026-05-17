@@ -17,11 +17,13 @@ import { supabase } from './src/lib/supabase';
 import { COLORS } from './src/constants/theme';
 import AuthScreen from './src/screens/AuthScreen';
 import AppNavigator from './src/navigation/AppNavigator';
+import OnboardingNavigator from './src/navigation/OnboardingNavigator';
 
 export default function App() {
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
   const [appReady, setAppReady] = useState(false);
+  const [needsOnboarding, setNeedsOnboarding] = useState(null);
 
   const [fontsLoaded] = useFonts({
     DMSans_400Regular,
@@ -39,15 +41,43 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
+    supabase.auth.getSession().then(({ data: { session: s } }) => {
+      setSession(s);
       setLoading(false);
     });
 
-    supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, s) => {
+      setSession(s);
     });
+
+    return () => subscription.unsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (!session) return;
+
+    const checkOnboarding = async () => {
+      const { data: areas } = await supabase
+        .from('user_areas')
+        .select('id')
+        .eq('user_id', session.user.id)
+        .limit(1);
+
+      if (!areas || areas.length === 0) {
+        setNeedsOnboarding(true);
+      } else {
+        setNeedsOnboarding(false);
+      }
+    };
+
+    checkOnboarding();
+  }, [session]);
+
+  const handleOnboardingComplete = () => {
+    setNeedsOnboarding(false);
+  };
 
   if (loading || (!fontsLoaded && !appReady)) {
     return (
@@ -73,10 +103,30 @@ export default function App() {
     );
   }
 
+  if (needsOnboarding === null) {
+    return (
+      <SafeAreaProvider>
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: COLORS.bg,
+            justifyContent: 'center',
+            alignItems: 'center',
+          }}>
+          <ActivityIndicator color={COLORS.accent} size={32} />
+        </View>
+      </SafeAreaProvider>
+    );
+  }
+
   return (
     <SafeAreaProvider>
       <NavigationContainer>
-        <AppNavigator />
+        {needsOnboarding ? (
+          <OnboardingNavigator onComplete={handleOnboardingComplete} />
+        ) : (
+          <AppNavigator />
+        )}
       </NavigationContainer>
     </SafeAreaProvider>
   );

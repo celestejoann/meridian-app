@@ -126,6 +126,7 @@ export default function LegacyScreen() {
           style={{
             fontSize: 32,
             fontWeight: '300',
+            fontFamily: 'PlayfairDisplay_300Light',
             color: COLORS.text,
             paddingHorizontal: 20,
             paddingTop: 20,

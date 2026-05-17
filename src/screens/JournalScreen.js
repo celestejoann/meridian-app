@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
   LayoutAnimation,
   Modal,
   Platform,
@@ -388,6 +389,8 @@ export default function JournalScreen() {
   const [oneWin, setOneWin] = useState('');
   const [sleepHours, setSleepHours] = useState('');
   const [eveningNote, setEveningNote] = useState('');
+  const [aiSummary, setAiSummary] = useState(null);
+  const [aiLoading, setAiLoading] = useState(false);
   const [otherNotes, setOtherNotes] = useState('');
   const [otherNotesExpanded, setOtherNotesExpanded] = useState(false);
 
@@ -407,13 +410,6 @@ export default function JournalScreen() {
   const isReadOnly = !isFuture && !isEditable;
   const inputEditable = isEditable && !entryLoading;
   const dimmed = isReadOnly;
-
-  const sleepDisplay = useMemo(() => {
-    if (sleepHours === '') return '— hrs';
-    const n = parseFloat(sleepHours);
-    if (Number.isNaN(n)) return sleepHours;
-    return `${n} hrs`;
-  }, [sleepHours]);
 
   const topBarMonthLabel = useMemo(() => {
     const d = parseDateKey(selectedDateKey);
@@ -493,6 +489,7 @@ export default function JournalScreen() {
         : ''
     );
     setEveningNote(data?.evening_note ?? '');
+    setAiSummary(data?.ai_daily_summary ?? null);
     setOtherNotes(notes);
     setOtherNotesExpanded(Boolean(notes?.trim()));
     setEntryLoading(false);
@@ -610,13 +607,6 @@ export default function JournalScreen() {
     }
   };
 
-  const adjustSleep = (delta) => {
-    if (!inputEditable) return;
-    const current = sleepHours === '' ? 0 : parseFloat(sleepHours);
-    const next = Math.min(12, Math.max(0, Math.round((current + delta) * 2) / 2));
-    setSleepHours(String(next));
-  };
-
   const toggleOtherThoughts = () => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setOtherNotesExpanded((v) => !v);
@@ -666,6 +656,9 @@ export default function JournalScreen() {
       if (!retryError) {
         setSavedFlash(true);
         await loadEntry();
+        if (eveningNote.trim()) {
+          generateDailySummary();
+        }
       }
       return;
     }
@@ -674,6 +667,74 @@ export default function JournalScreen() {
     if (!error) {
       setSavedFlash(true);
       await loadEntry();
+      if (eveningNote.trim()) {
+        generateDailySummary();
+      }
+    }
+  };
+
+  const generateDailySummary = async () => {
+    if (!userId || !selectedDateKey) return;
+    setAiLoading(true);
+    try {
+      const { data: completions } = await supabase
+        .from('habit_completions')
+        .select('completion_type, habits(name)')
+        .eq('user_id', userId)
+        .eq('completed_date', selectedDateKey);
+
+      const completed = (completions || [])
+        .filter(c => c.completion_type === 'completed')
+        .map(c => c.habits?.name)
+        .filter(Boolean);
+
+      const lifeHappens = (completions || [])
+        .filter(c => c.completion_type === 'life_happens')
+        .map(c => c.habits?.name)
+        .filter(Boolean);
+
+      const userMessage = `Here is what the user recorded today:
+- One thing that mattered: ${oneThing || 'not recorded'}
+- Win of the day: ${oneWin || 'not recorded'}
+- Morning reflection: ${morningNote || 'not recorded'}
+- Evening reflection: ${eveningNote || 'not recorded'}
+- Commitments they showed up for: ${completed.length > 0 ? completed.join(', ') : 'none recorded'}
+- Grace days (life happens): ${lifeHappens.length > 0 ? lifeHappens.join(', ') : 'none'}
+- Sleep hours: ${sleepHours || 'not recorded'}
+
+Write a 2-3 sentence Reflective Mirror summary of what today's data shows about who they are. Stick only to what they recorded. Do not give advice or suggestions.`;
+
+      const { data, error: invokeError } = await supabase.functions.invoke(
+        'anthropic',
+        {
+          body: {
+            model: 'claude-haiku-4-5-20251001',
+            max_tokens: 300,
+            system:
+              'You are the Reflective Mirror — the voice of Meridian, an identity-first life app. Your only job is to reflect back what the user has already given you. You do not give advice, suggestions, or interpretations about health, relationships, finances, or any other area of life. You only summarize what they recorded, framed as identity evidence in present tense. Rules: Stick strictly to data the user provided. Never infer, advise, or extrapolate beyond what they wrote. Use present tense identity framing ("You are someone who..."). 2-3 sentences only. Warm but neutral. Never prescriptive. Never mention anything that could be construed as medical, mental health, financial, or relationship advice.',
+            messages: [{ role: 'user', content: userMessage }],
+          },
+        }
+      );
+
+      if (invokeError) {
+        console.log('AI summary error:', invokeError);
+      } else {
+        const summaryText = data?.content?.[0]?.text ?? null;
+
+        if (summaryText) {
+          await supabase
+            .from('daily_entries')
+            .update({ ai_daily_summary: summaryText })
+            .eq('user_id', userId)
+            .eq('entry_date', selectedDateKey);
+          setAiSummary(summaryText);
+        }
+      }
+    } catch (e) {
+      console.log('AI summary error:', e);
+    } finally {
+      setAiLoading(false);
     }
   };
 
@@ -704,6 +765,10 @@ export default function JournalScreen() {
         </TouchableOpacity>
       </View>
 
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={90}>
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
@@ -726,22 +791,21 @@ export default function JournalScreen() {
           <>
             <Text style={styles.sectionLabel}>THIS MORNING</Text>
 
-            <Text style={[styles.fieldLabel, styles.padH]}>REST</Text>
-            <View style={[styles.sleepRow, dimmed && styles.dimmed]}>
-              <TouchableOpacity
-                style={styles.sleepBtn}
-                onPress={() => adjustSleep(-0.5)}
-                disabled={!inputEditable}>
-                <Text style={styles.sleepBtnText}>−</Text>
-              </TouchableOpacity>
-              <Text style={styles.sleepValue}>{sleepDisplay}</Text>
-              <TouchableOpacity
-                style={styles.sleepBtn}
-                onPress={() => adjustSleep(0.5)}
-                disabled={!inputEditable}>
-                <Text style={styles.sleepBtnText}>+</Text>
-              </TouchableOpacity>
-            </View>
+            <Text style={[styles.fieldLabel, styles.padH]}>HOURS SLEPT</Text>
+            <TextInput
+              style={[styles.sleepInput, dimmed && styles.dimmed]}
+              placeholder="e.g. 7.5"
+              placeholderTextColor={J.placeholder}
+              value={sleepHours}
+              onChangeText={(val) => {
+                if (!inputEditable) return;
+                const clean = val.replace(/[^0-9.]/g, '');
+                setSleepHours(clean);
+              }}
+              keyboardType="decimal-pad"
+              editable={inputEditable}
+              maxLength={4}
+            />
 
             <ThinDivider style={styles.dividerTight} />
 
@@ -771,7 +835,7 @@ export default function JournalScreen() {
 
             <Text style={[styles.fieldLabel, styles.padH]}>WHAT MATTERS MOST TODAY</Text>
             <TextInput
-              style={[styles.lineInput, styles.padH, dimmed && styles.dimmed]}
+              style={[styles.oneThingInput, dimmed && styles.dimmed]}
               placeholder="The one thing..."
               placeholderTextColor={J.placeholder}
               value={oneThing}
@@ -813,6 +877,41 @@ export default function JournalScreen() {
               textAlignVertical="top"
               editable={inputEditable}
             />
+
+            {(aiSummary || aiLoading) && (
+              <View style={{
+                marginHorizontal: 16,
+                marginTop: 20,
+                backgroundColor: '#231f35',
+                borderRadius: 12,
+                padding: 16,
+                borderWidth: 1,
+                borderColor: '#2a2040',
+              }}>
+                <Text style={{
+                  color: '#6b5fa0',
+                  fontSize: 10,
+                  letterSpacing: 1.5,
+                  fontFamily: 'DMSans_500Medium',
+                  marginBottom: 8,
+                }}>✦ TODAY'S REFLECTION</Text>
+                {aiLoading ? (
+                  <Text style={{
+                    color: '#9d8ec0',
+                    fontSize: 14,
+                    fontFamily: 'DMSans_400Regular',
+                    fontStyle: 'italic',
+                  }}>Reflecting on your day...</Text>
+                ) : (
+                  <Text style={{
+                    color: '#f5f3ff',
+                    fontSize: 15,
+                    fontFamily: 'DMSans_400Regular',
+                    lineHeight: 22,
+                  }}>{aiSummary}</Text>
+                )}
+              </View>
+            )}
 
             <View style={styles.otherThoughtsWrap}>
               <TouchableOpacity
@@ -871,6 +970,7 @@ export default function JournalScreen() {
           </>
         )}
       </ScrollView>
+      </KeyboardAvoidingView>
 
       <Modal
         visible={calendarOpen}
@@ -1030,23 +1130,53 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     marginBottom: 0,
   },
+  oneThingInput: {
+    backgroundColor: '#1a1628',
+    borderWidth: 1,
+    borderColor: '#2a2040',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    marginHorizontal: 16,
+    color: J.text,
+    fontFamily: 'DMSans_400Regular',
+    fontSize: 16,
+    fontStyle: 'italic',
+    marginBottom: 0,
+  },
   multilineInput: {
     minHeight: 160,
-    paddingHorizontal: 24,
-    backgroundColor: 'transparent',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: '#1a1628',
     color: J.text,
     fontFamily: 'DMSans_400Regular',
     fontSize: 15,
     lineHeight: 24,
-    borderWidth: 0,
+    borderWidth: 1,
+    borderColor: '#2a2040',
+    borderRadius: 12,
     textAlignVertical: 'top',
     marginBottom: 0,
+    marginHorizontal: 16,
   },
   multilineMoment: {
     minHeight: 100,
   },
   multilineTall: {
     minHeight: 200,
+  },
+  sleepInput: {
+    backgroundColor: '#1a1628',
+    color: J.text,
+    fontFamily: 'DMSans_400Regular',
+    fontSize: 15,
+    borderWidth: 1,
+    borderColor: '#2a2040',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    marginHorizontal: 16,
   },
   sleepRow: {
     paddingHorizontal: 24,

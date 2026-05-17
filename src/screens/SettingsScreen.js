@@ -11,9 +11,8 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
-import { useAppNavigation } from '../navigation/AppNavigationContext';
 import { COLORS, FONTS } from '../constants/theme';
 
 function memberSinceLabel(createdAt) {
@@ -47,7 +46,7 @@ function SettingsCard({ children }) {
 }
 
 export default function SettingsScreen() {
-  const { openLegacy } = useAppNavigation();
+  const navigation = useNavigation();
   const [loading, setLoading] = useState(true);
   const [email, setEmail] = useState('');
   const [memberSince, setMemberSince] = useState('');
@@ -81,6 +80,7 @@ export default function SettingsScreen() {
           style={{
             fontSize: 32,
             fontWeight: '300',
+            fontFamily: 'PlayfairDisplay_300Light',
             color: COLORS.text,
             paddingHorizontal: 20,
             paddingTop: 20,
@@ -109,7 +109,6 @@ export default function SettingsScreen() {
 
             <SectionLabel>YOUR ACCOUNT</SectionLabel>
             <SettingsCard>
-              <SettingsRow label="Legacy" onPress={openLegacy} />
               <SettingsRow label="Your profile" />
               <SettingsRow label="Notifications" />
               <SettingsRow label="Privacy & Security" isLast />
@@ -117,9 +116,9 @@ export default function SettingsScreen() {
 
             <SectionLabel>LEGAL</SectionLabel>
             <SettingsCard>
-              <SettingsRow label="Privacy Policy" />
-              <SettingsRow label="Terms of Service" />
-              <SettingsRow label="Disclaimer" isLast />
+              <SettingsRow label="Privacy Policy" onPress={() => navigation.navigate('Privacy')} />
+              <SettingsRow label="Terms of Service" onPress={() => navigation.navigate('Terms')} />
+              <SettingsRow label="Disclaimer" isLast onPress={() => navigation.navigate('Disclaimer')} />
             </SettingsCard>
 
             <SectionLabel>SUPPORT</SectionLabel>
@@ -137,19 +136,19 @@ export default function SettingsScreen() {
                 ]}
                 onPress={() => {
                   Alert.alert(
-                    'Step away from Meridian?',
-                    'You can return anytime.',
+                    'Sign Out',
+                    "You'll need to sign back in to access your account.",
                     [
                       { text: 'Cancel', style: 'cancel' },
                       {
-                        text: 'Step away',
+                        text: 'Sign Out',
                         style: 'destructive',
                         onPress: () => supabase.auth.signOut(),
                       },
                     ]
                   );
                 }}>
-                <Text style={styles.signOutText}>Step away</Text>
+                <Text style={styles.signOutText}>Sign Out</Text>
               </Pressable>
             </View>
           </>

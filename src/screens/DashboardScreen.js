@@ -338,6 +338,8 @@ export default function DashboardScreen() {
   const [streak, setStreak] = useState(0);
   const [bestStreak, setBestStreak] = useState(0);
   const [toggleBusyId, setToggleBusyId] = useState(null);
+  const [tasksDueToday, setTasksDueToday] = useState([]);
+  const [tasksDueThisWeek, setTasksDueThisWeek] = useState([]);
 
   const dateSubtitle = useMemo(() => headerDateLabel(new Date()), []);
   const todayKey = useMemo(() => formatLocalDateKey(new Date()), []);
@@ -444,6 +446,9 @@ export default function DashboardScreen() {
 
     const todayStr = formatLocalDateKey(new Date());
     const mondayStr = getMondayKey(new Date());
+    const sundayDate = new Date();
+    sundayDate.setDate(sundayDate.getDate() + (7 - sundayDate.getDay()));
+    const sundayStr = sundayDate.toLocaleDateString('en-CA');
 
     const [
       { data: habitsData, error: habitsErr },
@@ -451,6 +456,7 @@ export default function DashboardScreen() {
       { data: weekRows },
       { data: areasData },
       { data: identitiesData },
+      { data: tasksData },
     ] = await Promise.all([
       supabase
         .from('habits')
@@ -471,6 +477,14 @@ export default function DashboardScreen() {
         .lte('completed_date', todayStr),
       supabase.from('user_areas').select('*').eq('user_id', uid),
       supabase.from('user_identities').select('*').eq('user_id', uid),
+      supabase
+        .from('tasks')
+        .select('*, goals(title, area)')
+        .eq('user_id', uid)
+        .neq('status', 'completed')
+        .not('due_date', 'is', null)
+        .lte('due_date', sundayStr)
+        .order('due_date', { ascending: true }),
     ]);
 
     if (habitsErr) {
@@ -487,6 +501,10 @@ export default function DashboardScreen() {
     setWeekCompletions(weekRows ?? []);
     setUserAreas(areasData ?? []);
     setUserIdentities(identitiesData ?? []);
+
+    const allTasks = tasksData || [];
+    setTasksDueToday(allTasks.filter(t => t.due_date <= todayStr));
+    setTasksDueThisWeek(allTasks.filter(t => t.due_date > todayStr));
 
     await recalcStreak(uid);
     setLoading(false);
@@ -670,6 +688,14 @@ export default function DashboardScreen() {
     setCompletion(habitId, true, 'life_happens');
   };
 
+  const toggleTask = async (taskId) => {
+    const { error } = await supabase
+      .from('tasks')
+      .update({ status: 'completed' })
+      .eq('id', taskId);
+    if (!error) await load();
+  };
+
   return (
     <SafeAreaView style={styles.safe} edges={['left', 'right']}>
       <ScrollView
@@ -760,65 +786,127 @@ export default function DashboardScreen() {
             ) : null}
 
             <Card>
-              <Text
-                style={[
-                  styles.playfairSectionHeading,
-                  styles.playfairSectionHeadingFont,
-                ]}>
-                Today&apos;s commitments
+              <Text style={[styles.playfairSectionHeading, styles.playfairSectionHeadingFont]}>
+                Commitments
               </Text>
+
               <Text style={styles.sectionTitle}>DUE TODAY</Text>
-              {dueToday.length > 0 ? (
-                <Text style={styles.dueCount}>
-                  {dueTodayDoneCount} of {dueToday.length} to show up for
-                </Text>
-              ) : null}
               {dueToday.length === 0 ? (
                 <Text style={styles.emptyText}>No commitments due today</Text>
               ) : (
-                dueToday.map((h) => {
-                  const busy = toggleBusyId === h.id;
-                  return (
-                    <HabitRow
-                      key={h.id}
-                      habit={h}
-                      completionType={todayByHabit.get(h.id) ?? null}
-                      busy={busy}
-                      onToggle={() => toggleHabit(h.id)}
-                      onLifeHappens={() => markLifeHappens(h.id)}
-                      variant="due"
-                    />
-                  );
-                })
+                <>
+                  {dueToday.length > 0 && (
+                    <Text style={styles.dueCount}>
+                      {dueTodayDoneCount} of {dueToday.length} to show up for
+                    </Text>
+                  )}
+                  {dueToday.map((h) => {
+                    const busy = toggleBusyId === h.id;
+                    return (
+                      <HabitRow
+                        key={h.id}
+                        habit={h}
+                        completionType={todayByHabit.get(h.id) ?? null}
+                        busy={busy}
+                        onToggle={() => toggleHabit(h.id)}
+                        onLifeHappens={() => markLifeHappens(h.id)}
+                        variant="due"
+                      />
+                    );
+                  })}
+                </>
+              )}
+
+              {thisWeek.length > 0 && (
+                <>
+                  <View style={styles.sectionDivider} />
+                  <Text style={styles.sectionTitle}>THIS WEEK</Text>
+                  {thisWeek.map(({ habit, subtitle }) => {
+                    const busy = toggleBusyId === habit.id;
+                    return (
+                      <HabitRow
+                        key={habit.id}
+                        habit={habit}
+                        completionType={todayByHabit.get(habit.id) ?? null}
+                        busy={busy}
+                        onToggle={() => toggleWeekHabit(habit.id)}
+                        subtitle={subtitle}
+                        variant="week"
+                      />
+                    );
+                  })}
+                </>
               )}
             </Card>
 
-            {thisWeek.length > 0 ? (
+            {(tasksDueToday.length > 0 || tasksDueThisWeek.length > 0) ? (
               <Card>
-                <Text
-                  style={[
-                    styles.playfairSectionHeading,
-                    styles.playfairSectionHeadingFont,
-                  ]}>
-                  Today&apos;s actions
+                <Text style={[styles.playfairSectionHeading, styles.playfairSectionHeadingFont]}>
+                  Actions
                 </Text>
-                <Text style={styles.sectionTitle}>THIS WEEK</Text>
-                {thisWeek.map(({ habit, subtitle }) => {
-                  const busy = toggleBusyId === habit.id;
-                  return (
-                    <HabitRow
-                      key={habit.id}
-                      habit={habit}
-                      completionType={todayByHabit.get(habit.id) ?? null}
-                      busy={busy}
-                      onToggle={() => toggleWeekHabit(habit.id)}
-                      subtitle={subtitle}
-                      variant="week"
-                    />
-                  );
-                })}
+
+                {tasksDueToday.length > 0 && (
+                  <>
+                    <Text style={styles.sectionTitle}>DUE TODAY</Text>
+                    {tasksDueToday.map(task => {
+                      const areaKey = (task.goals?.area || '').toLowerCase();
+                      const areaColor = AREA_COLORS[areaKey] || COLORS.accent;
+                      return (
+                        <TouchableOpacity
+                          key={task.id}
+                          style={styles.actionRow}
+                          onPress={() => toggleTask(task.id)}>
+                          <View style={[styles.actionCheck, { borderColor: areaColor }]}>
+                            <View style={[styles.actionCheckInner, { backgroundColor: areaColor }]} />
+                          </View>
+                          <View style={styles.actionContent}>
+                            <Text style={styles.actionTitle}>{task.title}</Text>
+                            <Text style={[styles.actionMeta, { color: areaColor }]}>
+                              {task.goals?.title || 'Pursuit'}
+                            </Text>
+                          </View>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </>
+                )}
+
+                {tasksDueThisWeek.length > 0 && (
+                  <>
+                    {tasksDueToday.length > 0 && <View style={styles.sectionDivider} />}
+                    <Text style={styles.sectionTitle}>THIS WEEK</Text>
+                    {tasksDueThisWeek.map(task => {
+                      const areaKey = (task.goals?.area || '').toLowerCase();
+                      const areaColor = AREA_COLORS[areaKey] || COLORS.accent;
+                      const dueDate = new Date(task.due_date + 'T00:00:00');
+                      const dueDateLabel = dueDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+                      return (
+                        <TouchableOpacity
+                          key={task.id}
+                          style={styles.actionRow}
+                          onPress={() => toggleTask(task.id)}>
+                          <View style={[styles.actionCheck, { borderColor: areaColor }]} />
+                          <View style={styles.actionContent}>
+                            <Text style={styles.actionTitle}>{task.title}</Text>
+                            <Text style={[styles.actionMeta, { color: areaColor }]}>
+                              {task.goals?.title || 'Pursuit'} · Due {dueDateLabel}
+                            </Text>
+                          </View>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </>
+                )}
               </Card>
-            ) : null}
+            ) : (
+              <Card>
+                <Text style={[styles.playfairSectionHeading, styles.playfairSectionHeadingFont]}>
+                  Actions
+                </Text>
+                <Text style={styles.emptyText}>No actions due this week.</Text>
+                <Text style={styles.emptySubtext}>Add milestones to your pursuits to see them here.</Text>
+              </Card>
+            )}
           </>
         )}
       </ScrollView>
@@ -957,6 +1045,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     fontFamily: FONTS.bodyMedium,
   },
+  sectionDivider: { height: 1, backgroundColor: COLORS.border, marginVertical: 14 },
   dueCount: {
     fontSize: 13,
     color: COLORS.mutedLight,
@@ -1048,4 +1137,11 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
   },
+  actionRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  actionCheck: { width: 22, height: 22, borderRadius: 11, borderWidth: 1.5, marginRight: 12, alignItems: 'center', justifyContent: 'center' },
+  actionCheckInner: { width: 10, height: 10, borderRadius: 5 },
+  actionContent: { flex: 1 },
+  actionTitle: { fontSize: 15, fontFamily: FONTS.body, color: COLORS.text, marginBottom: 2 },
+  actionMeta: { fontSize: 12, fontFamily: FONTS.body },
+  emptySubtext: { fontSize: 13, fontFamily: FONTS.body, color: COLORS.muted, marginTop: 4 },
 });

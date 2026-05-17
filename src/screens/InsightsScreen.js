@@ -15,7 +15,7 @@ import { supabase } from '../lib/supabase';
 import MeridianWordmark from '../components/MeridianWordmark';
 import { useAppNavigation } from '../navigation/AppNavigationContext';
 import { COLORS, FONTS, AREA_COLORS } from '../constants/theme';
-import Svg, { Polygon, Circle, Text as SvgText, Line } from 'react-native-svg';
+import Svg, { Polygon, Circle, Line, Text as SvgText, Defs, RadialGradient, Stop } from 'react-native-svg';
 
 const AREA_ICONS = {
   health: '💚',
@@ -314,162 +314,169 @@ function HeroStatCard({ emoji, value, label }) {
   );
 }
 
-function LifeWheel({ areas, areasCovered, selectedArea, onSelectArea }) {
-  const cx = 150;
-  const cy = 150;
-  const maxRadius = 90;
+function LifeWheel({ areas, selectedArea, onSelectArea }) {
+  const size = 340;
+  const cx = size / 2;
+  const cy = size / 2;
+  const maxRadius = 80;
   const totalAreas = areas.length;
 
   if (totalAreas === 0) {
     return (
-      <Text style={styles.lifeWheelEmpty}>Add life areas to see your wheel</Text>
+      <View style={{ height: 300, alignItems: 'center', justifyContent: 'center' }}>
+        <Text style={{ color: '#6b5fa0', fontFamily: 'DMSans_400Regular', fontSize: 14 }}>
+          Add life areas to see your wheel
+        </Text>
+      </View>
     );
   }
 
-  const spokes = areas.map((area, index) => {
+  const getPoint = (index, radius) => {
     const angle = (index / totalAreas) * 2 * Math.PI - Math.PI / 2;
-    const r = area.spokeLengthRatio * maxRadius;
-    const scoreX = cx + r * Math.cos(angle);
-    const scoreY = cy + r * Math.sin(angle);
-    const edgeX = cx + maxRadius * Math.cos(angle);
-    const edgeY = cy + maxRadius * Math.sin(angle);
-    const labelR = maxRadius + 38;
-    const labelX = cx + labelR * Math.cos(angle);
-    const labelY = cy + labelR * Math.sin(angle);
-    const colorOpacity = completionOpacity(area.completionRate);
-    const dotColor = hexToRgba(area.color, colorOpacity);
-    const labelColor = area.isEmpty
-      ? COLORS.muted
-      : hexToRgba(area.color, colorOpacity);
     return {
-      ...area,
+      x: cx + radius * Math.cos(angle),
+      y: cy + radius * Math.sin(angle),
       angle,
-      scoreX,
-      scoreY,
-      edgeX,
-      edgeY,
-      labelX,
-      labelY,
-      dotColor,
-      labelColor,
     };
+  };
+
+  // Grid rings as connected polygons
+  const gridRings = [0.25, 0.5, 0.75, 1.0].map(ratio => {
+    const points = Array.from({ length: totalAreas }, (_, i) => {
+      const p = getPoint(i, maxRadius * ratio);
+      return `${p.x},${p.y}`;
+    }).join(' ');
+    return { points, ratio };
   });
 
-  const polygonPoints = spokes.map((p) => `${p.scoreX},${p.scoreY}`).join(' ');
+  // Data polygon — connects all area data points
+  const dataPoints = areas.map((area, i) => {
+    const r = area.spokeLengthRatio * maxRadius;
+    const p = getPoint(i, r);
+    return p;
+  });
+  const dataPolygonPoints = dataPoints.map(p => `${p.x},${p.y}`).join(' ');
+
+  // Spoke lines from center to outer ring
+  const spokeLines = Array.from({ length: totalAreas }, (_, i) => {
+    const outer = getPoint(i, maxRadius);
+    return { x2: outer.x, y2: outer.y };
+  });
+
+  // Area labels and dots
+  const labelRadius = maxRadius + 38;
+  const dotRadius = maxRadius + 16;
 
   return (
-    <View style={styles.lifeWheelSvgWrap}>
-      <Svg width={300} height={300} viewBox="0 0 300 300">
-        {[0.25, 0.5, 0.75, 1].map((pct) => (
-          <Circle
-            key={pct}
-            cx={cx}
-            cy={cy}
-            r={maxRadius * pct}
-            stroke={COLORS.border}
-            strokeWidth={1}
-            fill="none"
-          />
-        ))}
-        {spokes.map((p) => (
-          <Line
-            key={`spoke-${p.key}`}
-            x1={cx}
-            y1={cy}
-            x2={p.edgeX}
-            y2={p.edgeY}
-            stroke={
-              selectedArea === p.key
-                ? hexToRgba(p.color, 0.6)
-                : COLORS.border
-            }
-            strokeWidth={selectedArea === p.key ? 2 : 1}
-          />
-        ))}
+    <Svg width={size} height={size + 60}>
+      <Defs>
+        <RadialGradient id="wheelFill" cx="50%" cy="50%" r="50%">
+          <Stop offset="0%" stopColor="#a78bfa" stopOpacity="0.05" />
+          <Stop offset="100%" stopColor="#a78bfa" stopOpacity="0.18" />
+        </RadialGradient>
+      </Defs>
+
+      {/* Grid rings */}
+      {gridRings.map(({ points, ratio }) => (
         <Polygon
-          points={polygonPoints}
-          fill={COLORS.accent}
-          fillOpacity={0.3}
-        />
-        <Polygon
-          points={polygonPoints}
+          key={ratio}
+          points={points}
           fill="none"
-          stroke={COLORS.accent}
-          strokeWidth={2}
+          stroke="#2a2040"
+          strokeWidth={ratio === 1.0 ? 1.5 : 1}
         />
-        {spokes.map(
-          (p) =>
-            !p.isEmpty ? (
-              <Circle
-                key={`dot-${p.key}`}
-                cx={p.scoreX}
-                cy={p.scoreY}
-                r={selectedArea === p.key ? 8 : 6}
-                fill={p.dotColor}
-              />
-            ) : null
-        )}
-        {spokes.map((p) => {
-          const textAnchor =
-            p.labelX < cx - 60
-              ? 'start'
-              : p.labelX > cx + 60
-                ? 'end'
-                : 'middle';
-          return (
-            <SvgText
-              key={`label-${p.key}`}
-              x={p.labelX}
-              y={p.labelY}
-              fontSize={10}
-              fill={p.labelColor}
-              textAnchor={textAnchor}
-              alignmentBaseline="middle">
-              {p.name}
-            </SvgText>
-          );
-        })}
-        <SvgText
-          x={cx}
-          y={cy - 4}
-          fontSize={22}
-          fontWeight="600"
-          fill={COLORS.accent}
-          textAnchor="middle">
-          {`${areasCovered.covered}/${areasCovered.total}`}
-        </SvgText>
-        <SvgText
-          x={cx}
-          y={cy + 16}
-          fontSize={10}
-          fill={COLORS.mutedLight}
-          textAnchor="middle">
-          areas covered
-        </SvgText>
-      </Svg>
-      {spokes.map((p) => (
-        <React.Fragment key={`touch-${p.key}`}>
-          {!p.isEmpty ? (
-            <TouchableOpacity
-              style={[
-                styles.lifeWheelTouchDot,
-                { left: p.scoreX - 18, top: p.scoreY - 18 },
-              ]}
-              onPress={() => onSelectArea(p.key)}
-              activeOpacity={0.7}
-            />
-          ) : null}
-          <TouchableOpacity
-            style={[
-              styles.lifeWheelTouchLabel,
-              { left: p.labelX - 44, top: p.labelY - 14 },
-            ]}
-            onPress={() => onSelectArea(p.key)}
-            activeOpacity={0.7}
-          />
-        </React.Fragment>
       ))}
-    </View>
+
+      {/* Spoke lines */}
+      {spokeLines.map((s, i) => (
+        <Line
+          key={i}
+          x1={cx} y1={cy}
+          x2={s.x2} y2={s.y2}
+          stroke="#2a2040"
+          strokeWidth={1}
+        />
+      ))}
+
+      {/* Data polygon fill */}
+      {dataPoints.some(p => p.x !== cx || p.y !== cy) && (
+        <Polygon
+          points={dataPolygonPoints}
+          fill="url(#wheelFill)"
+          stroke="#a78bfa"
+          strokeWidth={1.5}
+          strokeOpacity={0.6}
+        />
+      )}
+
+      {/* Colored area endpoint dots */}
+      {areas.map((area, i) => {
+        const r = area.spokeLengthRatio * maxRadius;
+        if (r === 0) return null;
+        const p = getPoint(i, r);
+        const isSelected = selectedArea === area.slug;
+        return (
+          <Circle
+            key={`dot-${i}`}
+            cx={p.x}
+            cy={p.y}
+            r={isSelected ? 7 : 5}
+            fill={area.color || '#a78bfa'}
+            fillOpacity={area.vibrancy}
+            stroke={isSelected ? '#ffffff' : 'none'}
+            strokeWidth={1.5}
+          />
+        );
+      })}
+
+      {/* Pursuit dots — glowing dot outside the wheel */}
+      {areas.map((area, i) => {
+        if (!area.hasPursuit) return null;
+        const p = getPoint(i, dotRadius);
+        return (
+          <Circle
+            key={`pursuit-${i}`}
+            cx={p.x}
+            cy={p.y}
+            r={3}
+            fill={area.color || '#a78bfa'}
+            fillOpacity={area.vibrancy * 0.8}
+          />
+        );
+      })}
+
+      {/* Area labels */}
+      {areas.map((area, i) => {
+        const p = getPoint(i, labelRadius);
+        const isSelected = selectedArea === area.slug;
+        return (
+          <React.Fragment key={`label-${i}`}>
+            <Circle
+              cx={p.x}
+              cy={p.y}
+              r={16}
+              fill="transparent"
+              onPress={() => onSelectArea && onSelectArea(area.slug)}
+            />
+            <SvgText
+              x={p.x}
+              y={p.y}
+              textAnchor="middle"
+              alignmentBaseline="middle"
+              fontSize={8}
+              fill={area.color || '#a78bfa'}
+              fillOpacity={isSelected ? 1 : area.vibrancy}
+              fontFamily="DMSans_500Medium"
+              fontWeight={isSelected ? 'bold' : 'normal'}>
+              {(area.name || '').toUpperCase()}
+            </SvgText>
+          </React.Fragment>
+        );
+      })}
+
+      {/* Center */}
+      <Circle cx={cx} cy={cy} r={3} fill="#a78bfa" fillOpacity={0.4} />
+    </Svg>
   );
 }
 
@@ -533,6 +540,7 @@ export default function InsightsScreen() {
   const [completions, setCompletions] = useState([]);
   const [userAreas, setUserAreas] = useState([]);
   const [userIdentities, setUserIdentities] = useState([]);
+  const [activeGoals, setActiveGoals] = useState([]);
   const [journalEntries, setJournalEntries] = useState([]);
   const [selectedArea, setSelectedArea] = useState(null);
   const [selectedDays, setSelectedDays] = useState(30);
@@ -546,6 +554,7 @@ export default function InsightsScreen() {
       setCompletions([]);
       setUserAreas([]);
       setUserIdentities([]);
+      setActiveGoals([]);
       setJournalEntries([]);
       setLoading(false);
       return;
@@ -558,6 +567,7 @@ export default function InsightsScreen() {
       { data: completionData },
       { data: areasData },
       { data: identitiesData },
+      { data: goalsData },
       { data: journalData },
     ] = await Promise.all([
       supabase
@@ -572,7 +582,15 @@ export default function InsightsScreen() {
         .gte('completed_date', since730)
         .lte('completed_date', todayKey),
       supabase.from('user_areas').select('*').eq('user_id', uid),
-      supabase.from('user_identities').select('*').eq('user_id', uid),
+      supabase
+        .from('user_identities')
+        .select('*')
+        .eq('user_id', uid),
+      supabase
+        .from('goals')
+        .select('*')
+        .eq('user_id', uid)
+        .eq('status', 'active'),
       supabase
         .from('daily_entries')
         .select('*')
@@ -585,6 +603,7 @@ export default function InsightsScreen() {
     setCompletions(completionData ?? []);
     setUserAreas(areasData ?? []);
     setUserIdentities(identitiesData ?? []);
+    setActiveGoals(goalsData ?? []);
     setJournalEntries(journalData ?? []);
     setLoading(false);
   }, [todayKey]);
@@ -721,55 +740,63 @@ export default function InsightsScreen() {
   }, [userAreas, habits, completions, rangeKeys]);
 
   const lifeWheelAreas = useMemo(() => {
-    const areas =
-      userAreas.length > 0
-        ? userAreas
-        : [...new Set(habits.map((h) => (h.area || 'general').toLowerCase()))].map(
-            (area) => ({ area, name: area })
-          );
-
-    return areas.slice(0, 7).map((ua) => {
-      const areaKey = (ua.area || ua.name || '').toLowerCase();
-      const areaHabits = habits.filter(
-        (h) => (h.area || '').toLowerCase() === areaKey
-      );
-
-      const habitCount = areaHabits.length;
-      const spokeLengthRatio =
-        habitCount === 0
-          ? 0
-          : Math.min(habitCount, MAX_HABITS_PER_AREA) / MAX_HABITS_PER_AREA;
-
-      let totalDue = 0;
-      let totalDone = 0;
-
-      for (const key of rangeKeys) {
-        const due = areaHabits.filter((h) =>
-          isHabitDueOnDate(h, key, completions)
+    const areas = userAreas.length > 0
+      ? userAreas
+      : [...new Set(habits.map(h => (h.area || 'general').toLowerCase()))].map(
+          area => ({ slug: area, name: area, color: '#a78bfa' })
         );
-        if (due.length === 0) continue;
-        const doneSet = completionsOnDate(completions, key);
-        totalDue += due.length;
-        totalDone += due.filter((h) => doneSet.has(h.id)).length;
+
+    const today = new Date();
+
+    return areas.slice(0, 8).map(ua => {
+      const slug = ua.slug || ua.area || '';
+
+      // Layer 1 — identity exists
+      const hasIdentity = userIdentities.some(i => i.area_slug === slug);
+
+      // Layer 2 — at least one active commitment
+      const areaHabits = habits.filter(h => (h.area || '').toLowerCase() === slug.toLowerCase());
+      const hasCommitment = areaHabits.length > 0;
+
+      // Layer 3 — active pursuit (bonus)
+      const hasPursuit = activeGoals.some(g => (g.area || '').toLowerCase() === slug.toLowerCase());
+
+      // Spoke length ratio: 0, 0.5, or 1.0
+      let spokeLengthRatio = 0;
+      if (hasIdentity && hasCommitment) spokeLengthRatio = 1.0;
+      else if (hasIdentity) spokeLengthRatio = 0.5;
+
+      // Vibrancy — based on most recent habit completion in this area
+      const habitIds = areaHabits.map(h => h.id);
+      const areaCompletions = completions.filter(c => habitIds.includes(c.habit_id));
+      let daysSinceActive = 999;
+      if (areaCompletions.length > 0) {
+        const mostRecent = areaCompletions.reduce((latest, c) => {
+          return c.completed_date > latest ? c.completed_date : latest;
+        }, '');
+        const diff = (today - new Date(mostRecent)) / (1000 * 60 * 60 * 24);
+        daysSinceActive = diff;
       }
 
-      const completionRate =
-        totalDue === 0 ? 0 : Math.round((totalDone / totalDue) * 100);
+      let vibrancy;
+      if (daysSinceActive <= 30) vibrancy = 1.0;
+      else if (daysSinceActive <= 60) vibrancy = 0.5;
+      else vibrancy = 0.2;
+
+      // If no commitments at all, use identity presence for vibrancy
+      if (areaHabits.length === 0) vibrancy = hasIdentity ? 0.4 : 0.15;
 
       return {
-        key: areaKey,
-        name:
-          ua.name ||
-          ua.display_name ||
-          areaKey.replace(/^\w/, (c) => c.toUpperCase()),
-        color: ua.color || AREA_COLORS[areaKey] || COLORS.accent,
-        habitCount,
+        ...ua,
+        slug,
+        hasIdentity,
+        hasCommitment,
+        hasPursuit,
         spokeLengthRatio,
-        completionRate,
-        isEmpty: habitCount === 0,
+        vibrancy,
       };
     });
-  }, [userAreas, habits, completions, rangeKeys]);
+  }, [userAreas, userIdentities, habits, activeGoals, completions]);
 
   const lifeWheelAreasCovered = useMemo(() => {
     const total = lifeWheelAreas.length;
@@ -982,6 +1009,7 @@ export default function InsightsScreen() {
           style={{
             fontSize: 32,
             fontWeight: '300',
+            fontFamily: 'PlayfairDisplay_300Light',
             color: COLORS.text,
             paddingHorizontal: 20,
             paddingTop: 20,
@@ -1031,12 +1059,11 @@ export default function InsightsScreen() {
               </Text>
               <LifeWheel
                 areas={lifeWheelAreas}
-                areasCovered={lifeWheelAreasCovered}
                 selectedArea={selectedArea}
-                onSelectArea={handleSelectArea}
+                onSelectArea={setSelectedArea}
               />
               <Text style={styles.lifeWheelLegend}>
-                Spoke length = commitments · Color = consistency
+                Spoke length = presence · Brightness = activity
               </Text>
             </View>
 
@@ -1345,8 +1372,10 @@ export default function InsightsScreen() {
               )}
             </View>
 
-            <TouchableOpacity style={styles.legacyLink} onPress={openLegacy}>
-              <Text style={styles.legacyLinkText}>View Legacy ›</Text>
+            <TouchableOpacity
+              style={styles.journeyBtn}
+              onPress={openLegacy}>
+              <Text style={styles.journeyBtnText}>Your Journey →</Text>
             </TouchableOpacity>
           </>
         )}
@@ -1517,6 +1546,8 @@ const styles = StyleSheet.create({
     color: COLORS.accent,
     fontWeight: '500',
   },
+  journeyBtn: { marginHorizontal: 20, marginTop: 24, marginBottom: 8, padding: 16, backgroundColor: COLORS.surface, borderRadius: 14, borderWidth: 1, borderColor: COLORS.border, alignItems: 'center' },
+  journeyBtnText: { color: COLORS.accent, fontFamily: FONTS.bodyMedium, fontSize: 15 },
   heroRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',

@@ -6,6 +6,7 @@ import {
   Modal,
   Platform,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -368,6 +369,7 @@ export default function JournalScreen() {
   const todayKey = useMemo(() => formatLocalDateKey(new Date()), []);
 
   const [userId, setUserId] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
   const [selectedDateKey, setSelectedDateKey] = useState(todayKey);
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [modalYear, setModalYear] = useState(() => new Date().getFullYear());
@@ -526,6 +528,14 @@ export default function JournalScreen() {
       saveOtherNotes(text);
     }, 500);
   };
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadCalendarData();
+    await loadReflectionPrompt();
+    await loadEntry();
+    setRefreshing(false);
+  }, [loadCalendarData, loadReflectionPrompt, loadEntry]);
 
   useFocusEffect(
     useCallback(() => {
@@ -739,7 +749,7 @@ Write a 2-3 sentence Reflective Mirror summary of what today's data shows about 
   };
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={styles.safe} edges={['left', 'right']}>
       <View style={styles.topBar}>
         <TouchableOpacity
           onPress={goPrevMonthTop}
@@ -773,7 +783,15 @@ Write a 2-3 sentence Reflective Mirror summary of what today's data shows about 
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}>
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="#a78bfa"
+            colors={['#a78bfa']}
+          />
+        }>
         <Text style={styles.dayName}>{dayName(selectedDateKey)}</Text>
         <Text style={styles.dateLine}>{dateSubtitleUpper(selectedDateKey)}</Text>
 
@@ -1047,8 +1065,8 @@ const styles = StyleSheet.create({
     paddingBottom: 24,
   },
   dayName: {
-    fontFamily: 'PlayfairDisplay_700Bold',
-    fontSize: 40,
+    fontFamily: 'PlayfairDisplay_300Light',
+    fontSize: 36,
     color: J.text,
     paddingHorizontal: 24,
     paddingTop: 8,

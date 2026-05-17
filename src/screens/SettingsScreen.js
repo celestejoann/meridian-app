@@ -71,7 +71,7 @@ export default function SettingsScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={styles.safe} edges={['left', 'right']}>
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
@@ -82,7 +82,6 @@ export default function SettingsScreen() {
             fontWeight: '300',
             fontFamily: 'PlayfairDisplay_300Light',
             color: COLORS.text,
-            paddingHorizontal: 20,
             paddingTop: 20,
             paddingBottom: 4,
           }}>

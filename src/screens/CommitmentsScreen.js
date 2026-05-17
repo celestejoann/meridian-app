@@ -4,6 +4,7 @@ import {
   Modal,
   Platform,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -123,6 +124,7 @@ export default function CommitmentsScreen() {
 
   const [userId, setUserId] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [userAreas, setUserAreas] = useState([]);
   const [activeHabits, setActiveHabits] = useState([]);
@@ -218,6 +220,12 @@ export default function CommitmentsScreen() {
     }, [load])
   );
 
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
+  }, [load]);
+
   const resetForm = () => {
     setTitle('');
     setAnchor('');
@@ -275,7 +283,15 @@ export default function CommitmentsScreen() {
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}>
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="#a78bfa"
+            colors={['#a78bfa']}
+          />
+        }>
         <Text
           style={{
             fontSize: 32,

@@ -2,6 +2,7 @@ import React, { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   Platform,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -65,6 +66,7 @@ function EmptyState({ children }) {
 
 export default function LegacyScreen() {
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [projects, setProjects] = useState([]);
   const [milestones, setMilestones] = useState([]);
   const [archivedHabits, setArchivedHabits] = useState([]);
@@ -116,12 +118,26 @@ export default function LegacyScreen() {
     }, [load])
   );
 
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
+  }, [load]);
+
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}>
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="#a78bfa"
+            colors={['#a78bfa']}
+          />
+        }>
         <Text
           style={{
             fontSize: 32,

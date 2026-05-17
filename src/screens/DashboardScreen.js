@@ -1,6 +1,7 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -338,6 +339,7 @@ export default function DashboardScreen() {
   const [streak, setStreak] = useState(0);
   const [bestStreak, setBestStreak] = useState(0);
   const [toggleBusyId, setToggleBusyId] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
   const [tasksDueToday, setTasksDueToday] = useState([]);
   const [tasksDueThisWeek, setTasksDueThisWeek] = useState([]);
 
@@ -515,6 +517,12 @@ export default function DashboardScreen() {
       load();
     }, [load])
   );
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
+  }, [load]);
 
   const setCompletion = async (habitId, nextChecked, completionType = 'completed') => {
     if (!userId) return;
@@ -702,7 +710,15 @@ export default function DashboardScreen() {
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}>
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="#a78bfa"
+            colors={['#a78bfa']}
+          />
+        }>
         <Text
           style={[
             styles.headerTitle,

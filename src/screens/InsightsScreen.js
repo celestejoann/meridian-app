@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Dimensions,
   Platform,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -536,6 +537,7 @@ export default function InsightsScreen() {
   const todayKey = useMemo(() => formatLocalDateKey(new Date()), []);
 
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [habits, setHabits] = useState([]);
   const [completions, setCompletions] = useState([]);
   const [userAreas, setUserAreas] = useState([]);
@@ -613,6 +615,12 @@ export default function InsightsScreen() {
       load();
     }, [load])
   );
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
+  }, [load]);
 
   const rangeKeys = useMemo(
     () => getLastNDayKeys(todayKey, selectedDays),
@@ -999,19 +1007,26 @@ export default function InsightsScreen() {
   }, []);
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={styles.safe} edges={['left', 'right']}>
       <ScrollView
         ref={mainScrollRef}
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}>
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="#a78bfa"
+            colors={['#a78bfa']}
+          />
+        }>
         <Text
           style={{
             fontSize: 32,
             fontWeight: '300',
             fontFamily: 'PlayfairDisplay_300Light',
             color: COLORS.text,
-            paddingHorizontal: 20,
             paddingTop: 20,
             paddingBottom: 4,
           }}>

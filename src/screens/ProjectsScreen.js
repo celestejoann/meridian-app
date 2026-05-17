@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -58,6 +59,7 @@ function AreaPill({ area }) {
 export default function ProjectsScreen() {
   const [userId, setUserId] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [userAreas, setUserAreas] = useState([]);
   const [userIdentities, setUserIdentities] = useState([]);
@@ -209,6 +211,12 @@ export default function ProjectsScreen() {
     }, [load])
   );
 
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
+  }, [load]);
+
   useEffect(() => {
     if (areaOptions.length > 0 && selectedArea == null) {
       setSelectedArea(areaOptions[0].key);
@@ -304,7 +312,15 @@ export default function ProjectsScreen() {
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}>
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="#a78bfa"
+            colors={['#a78bfa']}
+          />
+        }>
         <Text style={[styles.screenTitle, { fontFamily: 'PlayfairDisplay_300Light' }]}>
           Pursuits
         </Text>

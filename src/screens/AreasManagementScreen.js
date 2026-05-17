@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useRef } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, TextInput,
-  StyleSheet, Alert, ActivityIndicator, Switch, KeyboardAvoidingView, Platform
+  StyleSheet, Alert, ActivityIndicator, Switch, KeyboardAvoidingView, Platform, RefreshControl
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
@@ -33,6 +33,7 @@ function slugify(name) {
 export default function AreasManagementScreen() {
   const [areas, setAreas] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
   const [newName, setNewName] = useState('');
   const [selectedColor, setSelectedColor] = useState(COLOR_OPTIONS[0]);
@@ -58,6 +59,12 @@ export default function AreasManagementScreen() {
   }, []);
 
   useFocusEffect(useCallback(() => { loadAreas(); }, [loadAreas]));
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadAreas();
+    setRefreshing(false);
+  }, [loadAreas]);
 
   const toggleActive = async (area) => {
     await supabase
@@ -156,7 +163,15 @@ export default function AreasManagementScreen() {
       <ScrollView
         ref={scrollRef}
         style={styles.container}
-        contentContainerStyle={styles.content}>
+        contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="#a78bfa"
+            colors={['#a78bfa']}
+          />
+        }>
 
       <Text style={styles.hint}>Toggle areas on or off. Only custom areas can be removed.</Text>
 

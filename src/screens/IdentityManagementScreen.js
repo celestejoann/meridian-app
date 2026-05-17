@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, TextInput,
-  StyleSheet, Alert, ActivityIndicator
+  StyleSheet, Alert, ActivityIndicator, RefreshControl
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
@@ -21,6 +21,7 @@ export default function IdentityManagementScreen() {
   const [identities, setIdentities] = useState([]);
   const [areas, setAreas] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
   const [newStatement, setNewStatement] = useState('');
   const [selectedAreaSlug, setSelectedAreaSlug] = useState(null);
@@ -53,6 +54,12 @@ export default function IdentityManagementScreen() {
   }, []);
 
   useFocusEffect(useCallback(() => { loadData(); }, [loadData]));
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadData();
+    setRefreshing(false);
+  }, [loadData]);
 
   const handleAdd = async () => {
     if (!newStatement.trim() || !selectedAreaSlug) return;
@@ -124,7 +131,17 @@ export default function IdentityManagementScreen() {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          tintColor="#a78bfa"
+          colors={['#a78bfa']}
+        />
+      }>
 
       <TouchableOpacity
         style={styles.addButton}

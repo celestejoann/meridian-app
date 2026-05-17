@@ -1,13 +1,11 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   Pressable,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
 } from 'react-native';
 import { COLORS, FONTS } from '../constants/theme';
-import PagerView from 'react-native-pager-view';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Polygon, Line, Defs, LinearGradient, Stop } from 'react-native-svg';
@@ -19,12 +17,9 @@ import MyLifeScreen from '../screens/MyLifeScreen';
 import LegacyScreen from '../screens/LegacyScreen';
 import { AppNavigationContext } from './AppNavigationContext';
 
-const TOP_TABS = [
-  { key: 'dashboard', label: 'Dashboard' },
-  { key: 'journal', label: 'Journal' },
-];
-
 const BOTTOM_TABS = [
+  { key: 'dashboard', label: 'Dashboard', icon: 'home', iconOutline: 'home-outline' },
+  { key: 'journal', label: 'Journal', icon: 'book', iconOutline: 'book-outline' },
   { key: 'mylife', label: 'My Life', icon: 'layers', iconOutline: 'layers-outline' },
   { key: 'insights', label: 'Insights', icon: 'bar-chart', iconOutline: 'bar-chart-outline' },
   { key: 'settings', label: 'Settings', icon: 'settings', iconOutline: 'settings-outline' },
@@ -32,11 +27,7 @@ const BOTTOM_TABS = [
 
 export default function MainApp() {
   const insets = useSafeAreaInsets();
-  const pagerRef = useRef(null);
-  const [topPage, setTopPage] = useState(0);
-  const [bottomTab, setBottomTab] = useState(null);
-
-  const showPager = bottomTab === null;
+  const [bottomTab, setBottomTab] = useState('dashboard');
 
   const openLegacy = useCallback(() => {
     setBottomTab('legacy');
@@ -55,34 +46,24 @@ export default function MainApp() {
     [openLegacy, openInsights, openSettings]
   );
 
-  const selectTopTab = useCallback((index) => {
-    setBottomTab(null);
-    setTopPage(index);
-    pagerRef.current?.setPage(index);
-  }, []);
-
-  const onPageSelected = useCallback((e) => {
-    const index = e.nativeEvent.position;
-    setTopPage(index);
-    setBottomTab(null);
-  }, []);
-
   const selectBottomTab = useCallback((key) => {
     setBottomTab(key);
   }, []);
 
   const renderBottomContent = () => {
     switch (bottomTab) {
+      case 'dashboard':
+        return <DashboardScreen />;
+      case 'journal':
+        return <JournalScreen />;
       case 'mylife':
         return <MyLifeScreen />;
       case 'insights':
         return <InsightsScreen />;
       case 'settings':
         return <SettingsScreen />;
-      case 'legacy':
-        return <LegacyScreen />;
       default:
-        return null;
+        return <DashboardScreen />;
     }
   };
 
@@ -120,51 +101,10 @@ export default function MainApp() {
               <Text style={styles.brandTagline}>LIVE YOUR VALUES</Text>
             </View>
           </View>
-
-          <View style={styles.topTabsRow}>
-            {TOP_TABS.map((tab, index) => {
-              const active = showPager && topPage === index;
-              return (
-                <TouchableOpacity
-                  key={tab.key}
-                  style={[
-                    styles.topTabBtn,
-                    {
-                      borderBottomColor: active ? COLORS.accent : 'transparent',
-                    },
-                  ]}
-                  onPress={() => selectTopTab(index)}
-                  activeOpacity={0.7}>
-                  <Text
-                    style={[
-                      styles.topTabLabel,
-                      { color: active ? COLORS.text : COLORS.muted },
-                    ]}>
-                    {tab.label}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
         </View>
 
         <View style={styles.content}>
-          {showPager ? (
-            <PagerView
-              ref={pagerRef}
-              style={styles.pager}
-              initialPage={0}
-              onPageSelected={onPageSelected}>
-              <View key="dashboard" style={styles.pagerPage}>
-                <DashboardScreen />
-              </View>
-              <View key="journal" style={styles.pagerPage}>
-                <JournalScreen />
-              </View>
-            </PagerView>
-          ) : (
-            renderBottomContent()
-          )}
+          {renderBottomContent()}
         </View>
 
         <View

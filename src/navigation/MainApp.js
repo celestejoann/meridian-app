@@ -8,7 +8,6 @@ import {
 import { COLORS, FONTS } from '../constants/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import Svg, { Polygon, Line, Defs, LinearGradient, Stop } from 'react-native-svg';
 import DashboardScreen from '../screens/DashboardScreen';
 import JournalScreen from '../screens/JournalScreen';
 import InsightsScreen from '../screens/InsightsScreen';
@@ -69,40 +68,7 @@ export default function MainApp() {
 
   return (
     <AppNavigationContext.Provider value={navContext}>
-      <View style={styles.root}>
-        <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
-          <View style={styles.brandingRow}>
-            <Svg width="32" height="32" viewBox="0 0 512 512">
-              <Defs>
-                <LinearGradient id="lf" x1="0" y1="0" x2="1" y2="1">
-                  <Stop offset="0" stopColor="#e8ecff" />
-                  <Stop offset="0.5" stopColor="#a5b4fc" />
-                  <Stop offset="1" stopColor="#4f46e5" />
-                </LinearGradient>
-                <LinearGradient id="rf" x1="0" y1="0" x2="1" y2="1">
-                  <Stop offset="0" stopColor="#3730a3" />
-                  <Stop offset="1" stopColor="#0f0e2a" />
-                </LinearGradient>
-              </Defs>
-              <Polygon points="256,82 256,352 382,352" fill="url(#rf)" />
-              <Polygon points="256,82 256,352 130,352" fill="url(#lf)" />
-              <Line
-                x1="256"
-                y1="82"
-                x2="256"
-                y2="352"
-                stroke="#f0f4ff"
-                strokeWidth="2"
-                opacity="0.7"
-              />
-            </Svg>
-            <View style={styles.brandTextCol}>
-              <Text style={styles.brandName}>Meridian</Text>
-              <Text style={styles.brandTagline}>LIVE YOUR VALUES</Text>
-            </View>
-          </View>
-        </View>
-
+      <View style={[styles.root, { paddingTop: insets.top }]}>
         <View style={styles.content}>
           {renderBottomContent()}
         </View>

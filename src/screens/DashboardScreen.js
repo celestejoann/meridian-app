@@ -12,6 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { COLORS, FONTS, AREA_COLORS } from '../constants/theme';
 import { supabase } from '../lib/supabase';
+import Svg, { Polygon } from 'react-native-svg';
 
 const DAY_NAMES = [
   'Sunday',
@@ -719,14 +720,29 @@ export default function DashboardScreen() {
             colors={['#a78bfa']}
           />
         }>
-        <Text
-          style={[
-            styles.headerTitle,
-            styles.headerTitleFont,
-          ]}>
-          Today
-        </Text>
-        <Text style={styles.headerDate}>{dateSubtitle}</Text>
+        <View style={styles.meridianHeader}>
+          <View style={styles.meridianLogoRow}>
+            <Svg width={28} height={28} viewBox="0 0 40 40">
+              <Polygon
+                points="20,4 36,34 20,28 4,34"
+                fill="none"
+                stroke="#a78bfa"
+                strokeWidth={2}
+                strokeLinejoin="round"
+              />
+              <Polygon
+                points="20,4 28,34 20,28 12,34"
+                fill="#a78bfa"
+                fillOpacity={0.3}
+                stroke="none"
+              />
+            </Svg>
+            <View style={styles.meridianWordmark}>
+              <Text style={styles.meridianName}>Meridian</Text>
+              <Text style={styles.meridianTagline}>LIVE YOUR VALUES</Text>
+            </View>
+          </View>
+        </View>
 
         {loading ? (
           <View style={styles.loaderWrap}>
@@ -942,6 +958,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingBottom: 32,
   },
+  meridianHeader: { paddingHorizontal: 24, paddingTop: 16, paddingBottom: 8, alignItems: 'center' },
+  meridianLogoRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 },
+  meridianWordmark: { flexDirection: 'column' },
+  meridianName: { fontSize: 22, fontFamily: 'PlayfairDisplay_300Light', color: COLORS.text, letterSpacing: 0.5 },
+  meridianTagline: { fontSize: 8, fontFamily: 'DMSans_500Medium', color: COLORS.muted, letterSpacing: 3, marginTop: 1 },
   headerTitle: {
     fontSize: 36,
     fontWeight: '300',
@@ -960,12 +981,12 @@ const styles = StyleSheet.create({
   },
   playfairSectionHeading: {
     fontSize: 24,
-    fontWeight: '700',
+    fontWeight: '300',
     color: COLORS.text,
     marginBottom: 12,
   },
   playfairSectionHeadingFont: {
-    fontFamily: FONTS.headingBold,
+    fontFamily: 'PlayfairDisplay_300Light',
   },
   whoIAmSection: {
     marginBottom: 16,

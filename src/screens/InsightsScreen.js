@@ -1011,7 +1011,10 @@ export default function InsightsScreen() {
       <ScrollView
         ref={mainScrollRef}
         style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          !loading && completions.length === 0 && { flexGrow: 1 },
+        ]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -1064,6 +1067,29 @@ export default function InsightsScreen() {
         {loading ? (
           <View style={styles.loaderWrap}>
             <ActivityIndicator color={COLORS.accent} size={32} />
+          </View>
+        ) : completions.length === 0 ? (
+          <View style={{
+            justifyContent: 'center',
+            alignItems: 'center',
+            flex: 1,
+          }}>
+            <Text style={{ fontSize: 40, color: '#a78bfa' }}>◎</Text>
+            <Text style={{
+              fontFamily: 'PlayfairDisplay_300Light',
+              fontSize: 22,
+              color: '#f5f3ff',
+              textAlign: 'center',
+              marginTop: 16,
+            }}>Your story is just beginning</Text>
+            <Text style={{
+              fontSize: 14,
+              color: '#6b5fa0',
+              textAlign: 'center',
+              lineHeight: 22,
+              marginTop: 8,
+              marginHorizontal: 32,
+            }}>Show up for your commitments and your patterns will appear here.</Text>
           </View>
         ) : (
           <>

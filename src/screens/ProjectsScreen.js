@@ -310,7 +310,10 @@ export default function ProjectsScreen() {
       <ScrollView
         ref={scrollRef}
         style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          !loading && activeGoals.length === 0 && legacyGoals.length === 0 && { flexGrow: 1 },
+        ]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
         refreshControl={
@@ -406,10 +409,28 @@ export default function ProjectsScreen() {
         ) : (
           <>
             {activeGoals.length === 0 && legacyGoals.length === 0 ? (
-              <Text style={styles.emptyText}>
-                No pursuits in motion.{'\n'}Tap + Begin a pursuit to start what
-                matters next.
-              </Text>
+              <View style={{
+                justifyContent: 'center',
+                alignItems: 'center',
+                flex: 1,
+              }}>
+                <Text style={{ fontSize: 40, color: '#a78bfa' }}>◈</Text>
+                <Text style={{
+                  fontFamily: 'PlayfairDisplay_300Light',
+                  fontSize: 22,
+                  color: '#f5f3ff',
+                  textAlign: 'center',
+                  marginTop: 16,
+                }}>No pursuits yet</Text>
+                <Text style={{
+                  fontSize: 14,
+                  color: '#6b5fa0',
+                  textAlign: 'center',
+                  lineHeight: 22,
+                  marginTop: 8,
+                  marginHorizontal: 32,
+                }}>A pursuit is meaningful work connected to who you are. Add one when you're ready.</Text>
+              </View>
             ) : null}
 
             {activeGoals.length === 0 && (legacyGoals.length > 0 || showForm) ? (

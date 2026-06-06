@@ -1,6 +1,8 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Animated,
+  Modal,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -8,7 +10,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { COLORS, FONTS, AREA_COLORS } from '../constants/theme';
 import { supabase } from '../lib/supabase';
@@ -91,6 +93,62 @@ function isDueToday(habit, weekCountMap, todayKey) {
   }
 }
 
+function computeHabitsForTodayRate(habits, weekRows, todayKey) {
+  const weekCountMap = buildWeekCountMap(weekRows);
+  const dueToday = habits.filter((h) => isDueToday(h, weekCountMap, todayKey));
+  const weekHabits = [];
+  for (const h of habits) {
+    if (!isOnOrAfterCreated(h, todayKey)) continue;
+    const freq = (h.frequency || 'daily').toLowerCase();
+    if (isDueToday(h, weekCountMap, todayKey)) continue;
+    if (freq === 'xperweek' || freq === 'weekly') {
+      weekHabits.push(h);
+    }
+  }
+  return [...dueToday, ...weekHabits];
+}
+
+function buildMorningInsightPrompt({
+  streakVal,
+  todayCount,
+  totalToday,
+  topArea,
+  identityStatement,
+}) {
+  return `You are Meridian, a warm life companion. Write exactly 2 warm sentences for someone who has a ${streakVal}-day streak, showed up ${todayCount} of ${totalToday} times today, their top area is ${topArea}, and one of their identity statements is: ${identityStatement}. Be personal and specific to their day. Never end with a general statement about identity or who they are. Just be warm and encouraging about their actual day.`;
+}
+
+function buildFallbackMorningInsight({
+  streakVal,
+  todayCount,
+  totalToday,
+  topArea,
+  identityStatement,
+}) {
+  const areaLabel = topArea.replace(/^\w/, (c) => c.toUpperCase());
+  if (todayCount > 0) {
+    return `You are someone who shows up — ${todayCount} of ${totalToday} commitments today, and a ${streakVal}-day streak that reflects who you already are. Your ${areaLabel} life is part of how you live as someone who ${identityStatement}.`;
+  }
+  return `You are someone with a ${streakVal}-day practice of returning to what matters. Today in ${areaLabel} is another chance to live as someone who ${identityStatement}.`;
+}
+
+function parseAnthropicResponse(rawData) {
+  let data = rawData;
+  if (typeof rawData === 'string') {
+    try {
+      data = JSON.parse(rawData);
+    } catch {
+      return rawData.trim();
+    }
+  }
+  if (typeof data?.content?.[0]?.text === 'string') {
+    return data.content[0].text.trim();
+  }
+  if (typeof data?.result === 'string') return data.result.trim();
+  if (typeof data?.text === 'string') return data.text.trim();
+  return '';
+}
+
 function computeShowUpStreak(dateKeysWithActivity) {
   let d = new Date();
   if (!dateKeysWithActivity.has(formatLocalDateKey(d))) {
@@ -161,6 +219,18 @@ function getCheckmarkColor(areaColor) {
   return isLightAreaColor(areaColor) ? '#ffffff' : COLORS.bg;
 }
 
+function formatIdentityConfirmation(statement) {
+  if (!statement || !String(statement).trim()) {
+    return "You showed up. That's who you are.";
+  }
+  let text = String(statement).trim();
+  const prefix = /^I am someone who\s+/i;
+  if (prefix.test(text)) {
+    text = text.replace(prefix, '');
+  }
+  return `You showed up as someone who ${text}`;
+}
+
 function getStreakHeroState(todayRate) {
   const hour = new Date().getHours();
   const isAfterSixPM = hour >= 18;
@@ -195,6 +265,26 @@ function getStreakHeroState(todayRate) {
     status: 'Show up for your commitments today',
     statusColor: COLORS.gold,
   };
+}
+
+function MeridianLogoSmall({ size = 32 }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 40 40">
+      <Polygon
+        points="20,4 36,34 20,28 4,34"
+        fill="none"
+        stroke="#a78bfa"
+        strokeWidth={2}
+        strokeLinejoin="round"
+      />
+      <Polygon
+        points="20,4 28,34 20,28 12,34"
+        fill="#a78bfa"
+        fillOpacity={0.3}
+        stroke="none"
+      />
+    </Svg>
+  );
 }
 
 function Card({ children, accentColor }) {
@@ -330,11 +420,15 @@ function HabitRow({
 }
 
 export default function DashboardScreen() {
+  const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState(null);
   const [habits, setHabits] = useState([]);
   const [userAreas, setUserAreas] = useState([]);
   const [userIdentities, setUserIdentities] = useState([]);
+  const [identityMap, setIdentityMap] = useState({});
+  const [confirmationMessage, setConfirmationMessage] = useState(null);
+  const [showConfirmation, setShowConfirmation] = useState(false);
   const [todayByHabit, setTodayByHabit] = useState(() => new Map());
   const [weekCompletions, setWeekCompletions] = useState([]);
   const [streak, setStreak] = useState(0);
@@ -343,6 +437,16 @@ export default function DashboardScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [tasksDueToday, setTasksDueToday] = useState([]);
   const [tasksDueThisWeek, setTasksDueThisWeek] = useState([]);
+  const [showGraceCard, setShowGraceCard] = useState(false);
+  const [morningInsight, setMorningInsight] = useState('');
+  const [insightLoading, setInsightLoading] = useState(true);
+  const [showMilestone, setShowMilestone] = useState(false);
+  const [milestoneText, setMilestoneText] = useState('');
+  const [milestoneSubtext, setMilestoneSubtext] = useState('');
+  const confirmationSlide = useRef(new Animated.Value(120)).current;
+  const confirmationTimerRef = useRef(null);
+  const graceFadeAnim = useRef(new Animated.Value(0)).current;
+  const milestoneAnim = useRef(new Animated.Value(0)).current;
 
   const dateSubtitle = useMemo(() => headerDateLabel(new Date()), []);
   const todayKey = useMemo(() => formatLocalDateKey(new Date()), []);
@@ -409,6 +513,147 @@ export default function DashboardScreen() {
     [todayRate]
   );
 
+  const dismissConfirmation = useCallback(() => {
+    Animated.timing(confirmationSlide, {
+      toValue: 120,
+      duration: 250,
+      useNativeDriver: true,
+    }).start(() => {
+      setShowConfirmation(false);
+      setConfirmationMessage(null);
+    });
+  }, [confirmationSlide]);
+
+  const showIdentityConfirmationBanner = useCallback(
+    (message) => {
+      if (confirmationTimerRef.current) {
+        clearTimeout(confirmationTimerRef.current);
+      }
+      setConfirmationMessage(message);
+      setShowConfirmation(true);
+      confirmationSlide.setValue(120);
+      Animated.spring(confirmationSlide, {
+        toValue: 0,
+        useNativeDriver: true,
+        tension: 65,
+        friction: 11,
+      }).start();
+      confirmationTimerRef.current = setTimeout(() => {
+        dismissConfirmation();
+      }, 2500);
+    },
+    [confirmationSlide, dismissConfirmation]
+  );
+
+  useEffect(() => {
+    return () => {
+      if (confirmationTimerRef.current) {
+        clearTimeout(confirmationTimerRef.current);
+      }
+    };
+  }, []);
+
+  const openGraceCard = useCallback(() => {
+    setShowGraceCard(true);
+    graceFadeAnim.setValue(0);
+    Animated.timing(graceFadeAnim, {
+      toValue: 1,
+      duration: 300,
+      useNativeDriver: true,
+    }).start();
+  }, [graceFadeAnim]);
+
+  const closeGraceCard = useCallback(() => {
+    setShowGraceCard(false);
+    graceFadeAnim.setValue(0);
+  }, [graceFadeAnim]);
+
+  const checkStreakMilestone = (streakCount) => {
+    const milestones = {
+      7: {
+        text: '7 Days Showing Up',
+        subtext: 'A week of evidence. This is who you are.',
+      },
+      21: {
+        text: '21 Days Showing Up',
+        subtext: 'Three weeks of proof. Your identity is clear.',
+      },
+      66: {
+        text: '66 Days Showing Up',
+        subtext: 'This is no longer a habit. It is simply you.',
+      },
+      100: {
+        text: '100 Days Showing Up',
+        subtext: 'One hundred days of being exactly who you said you were.',
+      },
+    };
+
+    if (milestones[streakCount]) {
+      setMilestoneText(milestones[streakCount].text);
+      setMilestoneSubtext(milestones[streakCount].subtext);
+      setShowMilestone(true);
+      Animated.sequence([
+        Animated.timing(milestoneAnim, {
+          toValue: 1,
+          duration: 400,
+          useNativeDriver: true,
+        }),
+        Animated.delay(3000),
+        Animated.timing(milestoneAnim, {
+          toValue: 0,
+          duration: 400,
+          useNativeDriver: true,
+        }),
+      ]).start(() => setShowMilestone(false));
+    }
+  };
+
+  const fetchMorningInsight = async ({
+    streakVal,
+    todayCount,
+    totalToday,
+    topArea,
+    identityStatement,
+  }) => {
+    const insightParams = {
+      streakVal,
+      todayCount,
+      totalToday,
+      topArea,
+      identityStatement,
+    };
+    const fallback = buildFallbackMorningInsight(insightParams);
+
+    try {
+      setInsightLoading(true);
+      const prompt = buildMorningInsightPrompt(insightParams);
+
+      const { data, error: invokeError } = await supabase.functions.invoke(
+        'anthropic',
+        {
+          body: {
+            model: 'claude-haiku-4-5-20251001',
+            max_tokens: 200,
+            messages: [{ role: 'user', content: prompt }],
+          },
+        }
+      );
+
+      if (invokeError) {
+        console.log('Insight fetch error:', invokeError);
+        setMorningInsight(fallback);
+      } else {
+        const text = data?.content?.[0]?.text ?? null;
+        setMorningInsight(text || fallback);
+      }
+    } catch (e) {
+      console.log('Insight fetch error:', e);
+      setMorningInsight(fallback);
+    } finally {
+      setInsightLoading(false);
+    }
+  };
+
   const recalcStreak = useCallback(async (uid) => {
     const since = addDays(new Date(), -400);
     const sinceKey = formatLocalDateKey(since);
@@ -425,8 +670,12 @@ export default function DashboardScreen() {
         datesWithActivity.add(String(row.completed_date).slice(0, 10));
       }
     }
-    setStreak(computeShowUpStreak(datesWithActivity));
-    setBestStreak(computeBestStreak(datesWithActivity));
+    const streakVal = computeShowUpStreak(datesWithActivity);
+    const bestVal = computeBestStreak(datesWithActivity);
+    setStreak(streakVal);
+    checkStreakMilestone(streakVal);
+    setBestStreak(bestVal);
+    return { streak: streakVal, bestStreak: bestVal };
   }, []);
 
   const load = useCallback(async () => {
@@ -437,15 +686,19 @@ export default function DashboardScreen() {
       setHabits([]);
       setUserAreas([]);
       setUserIdentities([]);
+      setIdentityMap({});
       setTodayByHabit(new Map());
       setWeekCompletions([]);
       setStreak(0);
+      checkStreakMilestone(0);
       setBestStreak(0);
+      setInsightLoading(false);
       setLoading(false);
       return;
     }
     const uid = userData.user.id;
     setUserId(uid);
+    setInsightLoading(true);
 
     const todayStr = formatLocalDateKey(new Date());
     const mondayStr = getMondayKey(new Date());
@@ -496,21 +749,49 @@ export default function DashboardScreen() {
       setHabits(habitsData ?? []);
     }
 
+    const habitsList = habitsData ?? [];
     const todayMap = new Map();
     for (const row of todayRows ?? []) {
       todayMap.set(row.habit_id, row.completion_type || 'completed');
     }
+    const habitsForToday = computeHabitsForTodayRate(
+      habitsList,
+      weekRows ?? [],
+      todayStr
+    );
+    const todayCount = habitsForToday.filter((h) => todayMap.has(h.id)).length;
+    const totalToday = habitsForToday.length;
+    const identities = identitiesData ?? [];
+    const topArea = identities[0]?.area_slug || 'life';
+    const identityStatement =
+      identities[0]?.statement || 'they are building a meaningful life';
+
     setTodayByHabit(todayMap);
     setWeekCompletions(weekRows ?? []);
     setUserAreas(areasData ?? []);
     setUserIdentities(identitiesData ?? []);
+    const idMap = {};
+    for (const row of identitiesData ?? []) {
+      const slug = (row.area_slug || row.area || '').toLowerCase();
+      if (slug && row.statement) {
+        idMap[slug] = row.statement;
+      }
+    }
+    setIdentityMap(idMap);
 
     const allTasks = tasksData || [];
     setTasksDueToday(allTasks.filter(t => t.due_date <= todayStr));
     setTasksDueThisWeek(allTasks.filter(t => t.due_date > todayStr));
 
-    await recalcStreak(uid);
+    const { streak: streakVal } = await recalcStreak(uid);
     setLoading(false);
+    fetchMorningInsight({
+      streakVal,
+      todayCount,
+      totalToday,
+      topArea,
+      identityStatement,
+    });
   }, [recalcStreak]);
 
   useFocusEffect(
@@ -591,6 +872,9 @@ export default function DashboardScreen() {
           completion_type: completionType,
         });
         if (error) throw error;
+        if (completionType === 'life_happens') {
+          openGraceCard();
+        }
       } else {
         const { error } = await supabase
           .from('habit_completions')
@@ -689,6 +973,10 @@ export default function DashboardScreen() {
     if (current) {
       setCompletion(habitId, false);
     } else {
+      const habit = habits.find((h) => h.id === habitId);
+      const areaKey = (habit?.area || '').toLowerCase();
+      const statement = areaKey ? identityMap[areaKey] : null;
+      showIdentityConfirmationBanner(formatIdentityConfirmation(statement));
       setCompletion(habitId, true, 'completed');
     }
   };
@@ -707,6 +995,52 @@ export default function DashboardScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['left', 'right']}>
+      {showMilestone && (
+        <Animated.View style={{
+          position: 'absolute',
+          top: 80,
+          left: 24,
+          right: 24,
+          zIndex: 999,
+          backgroundColor: '#1a1628',
+          borderRadius: 20,
+          padding: 24,
+          alignItems: 'center',
+          borderWidth: 1,
+          borderColor: '#a78bfa',
+          shadowColor: '#a78bfa',
+          shadowOffset: { width: 0, height: 0 },
+          shadowOpacity: 0.4,
+          shadowRadius: 20,
+          elevation: 10,
+          opacity: milestoneAnim,
+          transform: [{
+            translateY: milestoneAnim.interpolate({
+              inputRange: [0, 1],
+              outputRange: [-20, 0],
+            }),
+          }],
+        }}>
+          <Text style={{
+            fontSize: 28,
+            marginBottom: 8,
+          }}>✦</Text>
+          <Text style={{
+            fontSize: 22,
+            color: '#f5f3ff',
+            fontFamily: 'PlayfairDisplay_300Light',
+            textAlign: 'center',
+            marginBottom: 8,
+          }}>{milestoneText}</Text>
+          <Text style={{
+            fontSize: 14,
+            color: '#a78bfa',
+            fontFamily: 'DMSans_400Regular',
+            textAlign: 'center',
+            lineHeight: 22,
+          }}>{milestoneSubtext}</Text>
+        </Animated.View>
+      )}
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
@@ -750,6 +1084,19 @@ export default function DashboardScreen() {
           </View>
         ) : (
           <>
+            <View style={styles.morningInsightCard}>
+              <Text style={styles.morningInsightLabel}>
+                YOUR MORNING INSIGHT
+              </Text>
+              {insightLoading ? (
+                <Text style={styles.morningInsightLoadingText}>
+                  Reflecting on your morning...
+                </Text>
+              ) : (
+                <Text style={styles.morningInsightText}>{morningInsight}</Text>
+              )}
+            </View>
+
             <View
               style={[
                 styles.streakHeroCard,
@@ -942,6 +1289,50 @@ export default function DashboardScreen() {
           </>
         )}
       </ScrollView>
+      {showConfirmation && confirmationMessage ? (
+        <Animated.View
+          style={[
+            styles.confirmationBanner,
+            {
+              bottom: 64 + insets.bottom,
+              transform: [{ translateY: confirmationSlide }],
+            },
+          ]}
+          pointerEvents="none">
+          <Text style={styles.confirmationText}>
+            <Text style={styles.confirmationCheck}>✦ </Text>
+            {confirmationMessage}
+          </Text>
+        </Animated.View>
+      ) : null}
+      <Modal
+        visible={showGraceCard}
+        transparent
+        animationType="none"
+        onRequestClose={closeGraceCard}>
+        <Animated.View style={[styles.graceOverlay, { opacity: graceFadeAnim }]}>
+          <View style={styles.graceCard}>
+            <View style={styles.graceLogoWrap}>
+              <MeridianLogoSmall size={32} />
+            </View>
+            <Text style={styles.graceHeadline}>
+              Your worth isn&apos;t in your streak.
+            </Text>
+            <Text style={styles.graceBody}>
+              Life happened today. That doesn&apos;t change who you are — it
+              proves you&apos;re human. Tomorrow you show up again, not to earn
+              your place, but because this is who you are.
+            </Text>
+            <TouchableOpacity
+              style={styles.graceButton}
+              onPress={closeGraceCard}
+              accessibilityRole="button"
+              accessibilityLabel="Life happens">
+              <Text style={styles.graceButtonText}>Life happens</Text>
+            </TouchableOpacity>
+          </View>
+        </Animated.View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1026,6 +1417,36 @@ const styles = StyleSheet.create({
   loaderWrap: {
     paddingVertical: 48,
     alignItems: 'center',
+  },
+  morningInsightCard: {
+    backgroundColor: COLORS.surfaceLight,
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+    borderLeftWidth: 3,
+    borderLeftColor: COLORS.accent,
+    zIndex: 2,
+    elevation: 2,
+  },
+  morningInsightLabel: {
+    fontSize: 10,
+    letterSpacing: 2,
+    color: COLORS.accent,
+    marginBottom: 8,
+    fontFamily: FONTS.bodyMedium,
+  },
+  morningInsightText: {
+    fontSize: 15,
+    color: COLORS.text,
+    fontStyle: 'italic',
+    fontFamily: FONTS.body,
+    lineHeight: 24,
+  },
+  morningInsightLoadingText: {
+    fontSize: 14,
+    color: COLORS.muted,
+    fontStyle: 'italic',
+    fontFamily: FONTS.body,
   },
   card: {
     backgroundColor: COLORS.surface,
@@ -1181,4 +1602,70 @@ const styles = StyleSheet.create({
   actionTitle: { fontSize: 15, fontFamily: FONTS.body, color: COLORS.text, marginBottom: 2 },
   actionMeta: { fontSize: 12, fontFamily: FONTS.body },
   emptySubtext: { fontSize: 13, fontFamily: FONTS.body, color: COLORS.muted, marginTop: 4 },
+  confirmationBanner: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    backgroundColor: '#1a1628',
+    borderLeftWidth: 4,
+    borderLeftColor: '#a78bfa',
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    zIndex: 100,
+  },
+  confirmationText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontFamily: 'DMSans_400Regular',
+    lineHeight: 20,
+  },
+  confirmationCheck: {
+    color: '#a78bfa',
+  },
+  graceOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+  },
+  graceCard: {
+    backgroundColor: '#1a1628',
+    borderRadius: 24,
+    padding: 32,
+    width: '100%',
+    maxWidth: 400,
+    alignItems: 'center',
+  },
+  graceLogoWrap: {
+    marginBottom: 8,
+  },
+  graceHeadline: {
+    fontFamily: 'PlayfairDisplay_300Light',
+    fontSize: 26,
+    color: '#ffffff',
+    textAlign: 'center',
+  },
+  graceBody: {
+    fontFamily: 'DMSans_400Regular',
+    fontSize: 15,
+    color: '#c4b5fd',
+    textAlign: 'center',
+    lineHeight: 24,
+    marginTop: 12,
+  },
+  graceButton: {
+    width: '100%',
+    backgroundColor: '#a78bfa',
+    borderRadius: 12,
+    padding: 16,
+    marginTop: 28,
+  },
+  graceButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#0f0d1a',
+    textAlign: 'center',
+  },
 });

@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -7,12 +7,16 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
+  TouchableOpacity,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
+import { scheduleDailyNotifications, cancelAllNotifications } from '../lib/notifications';
 import { COLORS, FONTS } from '../constants/theme';
 
 function memberSinceLabel(createdAt) {
@@ -50,6 +54,44 @@ export default function SettingsScreen() {
   const [loading, setLoading] = useState(true);
   const [email, setEmail] = useState('');
   const [memberSince, setMemberSince] = useState('');
+  const [morningTime, setMorningTime] = useState({ hour: 8, minute: 0 });
+  const [eveningTime, setEveningTime] = useState({ hour: 20, minute: 0 });
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+
+  useEffect(() => {
+    const loadNotificationSettings = async () => {
+      try {
+        const saved = await AsyncStorage.getItem('notificationSettings');
+        if (saved) {
+          const { morningTime: morning, eveningTime: evening, enabled } = JSON.parse(saved);
+          setMorningTime(morning);
+          setEveningTime(evening);
+          setNotificationsEnabled(enabled);
+        }
+      } catch (e) {}
+    };
+    loadNotificationSettings();
+  }, []);
+
+  const saveNotificationSettings = async (morning, evening, enabled) => {
+    try {
+      await AsyncStorage.setItem('notificationSettings', JSON.stringify({
+        morningTime: morning,
+        eveningTime: evening,
+        enabled,
+      }));
+      if (enabled) {
+        await scheduleDailyNotifications(
+          morning.hour,
+          morning.minute,
+          evening.hour,
+          evening.minute
+        );
+      } else {
+        await cancelAllNotifications();
+      }
+    } catch (e) {}
+  };
 
   const loadUser = useCallback(async () => {
     setLoading(true);
@@ -125,6 +167,121 @@ export default function SettingsScreen() {
               <SettingsRow label="Send Feedback" onPress={openFeedback} />
               <SettingsRow label="Rate the App" isLast />
             </SettingsCard>
+
+            <View style={{
+              backgroundColor: '#1a1628',
+              borderRadius: 16,
+              padding: 20,
+              marginHorizontal: 16,
+              marginBottom: 16,
+            }}>
+              <Text style={{
+                fontSize: 11,
+                letterSpacing: 2,
+                color: '#a78bfa',
+                marginBottom: 16,
+                fontFamily: 'DMSans_500Medium',
+              }}>NOTIFICATIONS</Text>
+
+              <View style={{
+                flexDirection: 'row',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: 20,
+              }}>
+                <Text style={{
+                  fontSize: 15,
+                  color: '#f5f3ff',
+                  fontFamily: 'DMSans_400Regular',
+                }}>Daily reminders</Text>
+                <Switch
+                  value={notificationsEnabled}
+                  onValueChange={(val) => {
+                    console.log('Toggle pressed, new value:', val);
+                    setNotificationsEnabled(val);
+                    saveNotificationSettings(morningTime, eveningTime, val);
+                  }}
+                  trackColor={{ false: '#2a2040', true: '#a78bfa' }}
+                  thumbColor={notificationsEnabled ? '#f5f3ff' : '#6b5fa0'}
+                />
+              </View>
+
+              {notificationsEnabled && (
+                <>
+                  <View style={{ marginBottom: 16 }}>
+                    <Text style={{
+                      fontSize: 13,
+                      color: '#9d8ec0',
+                      fontFamily: 'DMSans_400Regular',
+                      marginBottom: 8,
+                    }}>Morning check-in</Text>
+                    <View style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 8,
+                    }}>
+                      {[6, 7, 8, 9, 10].map(h => (
+                        <TouchableOpacity
+                          key={h}
+                          onPress={() => {
+                            const newTime = { ...morningTime, hour: h };
+                            setMorningTime(newTime);
+                            saveNotificationSettings(newTime, eveningTime, true);
+                          }}
+                          style={{
+                            paddingHorizontal: 12,
+                            paddingVertical: 8,
+                            borderRadius: 20,
+                            backgroundColor: morningTime.hour === h ? '#a78bfa' : '#2a2040',
+                          }}>
+                          <Text style={{
+                            fontSize: 13,
+                            color: morningTime.hour === h ? '#0f0d1a' : '#9d8ec0',
+                            fontFamily: 'DMSans_500Medium',
+                          }}>{h}:00</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+
+                  <View>
+                    <Text style={{
+                      fontSize: 13,
+                      color: '#9d8ec0',
+                      fontFamily: 'DMSans_400Regular',
+                      marginBottom: 8,
+                    }}>Evening reflection</Text>
+                    <View style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 8,
+                    }}>
+                      {[18, 19, 20, 21, 22].map(h => (
+                        <TouchableOpacity
+                          key={h}
+                          onPress={() => {
+                            const newTime = { ...eveningTime, hour: h };
+                            setEveningTime(newTime);
+                            saveNotificationSettings(morningTime, newTime, true);
+                          }}
+                          style={{
+                            paddingHorizontal: 12,
+                            paddingVertical: 8,
+                            borderRadius: 20,
+                            backgroundColor: eveningTime.hour === h ? '#a78bfa' : '#2a2040',
+                          }}>
+                          <Text style={{
+                            fontSize: 13,
+                            color: eveningTime.hour === h ? '#0f0d1a' : '#9d8ec0',
+                            fontFamily: 'DMSans_500Medium',
+                          }}>{h}:00</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                </>
+              )}
+            </View>
 
             <SectionLabel>DANGER ZONE</SectionLabel>
             <View style={styles.dangerCard}>

@@ -3,9 +3,7 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   LayoutAnimation,
-  Modal,
   Platform,
-  Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -17,7 +15,6 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
-import { COLORS } from '../constants/theme';
 import { supabase } from '../lib/supabase';
 
 const J = {
@@ -29,29 +26,6 @@ const J = {
   prompt: '#e2d9f3',
   divider: '#2a2040',
   placeholder: '#3d3060',
-};
-
-const MONTH_NAMES = [
-  'January',
-  'February',
-  'March',
-  'April',
-  'May',
-  'June',
-  'July',
-  'August',
-  'September',
-  'October',
-  'November',
-  'December',
-];
-
-const WEEKDAY_HEADERS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-
-const DOT_COLORS = {
-  green: COLORS.green,
-  gold: COLORS.gold,
-  red: COLORS.red,
 };
 
 if (
@@ -79,115 +53,23 @@ function getDayOfYear(date) {
   return Math.floor(diff / (1000 * 60 * 60 * 24));
 }
 
-function habitCreatedDateKey(habit) {
-  return String(habit.created_at).slice(0, 10);
-}
-
-function getWeeklyDueDay(habit) {
-  if (habit.weekly_due_day != null) {
-    return habit.weekly_due_day;
-  }
-  return new Date(habit.created_at).getDay();
-}
-
-function getMondayKey(dateKey) {
-  const x = parseDateKey(dateKey);
-  const dow = x.getDay();
-  const diff = dow === 0 ? -6 : 1 - dow;
-  x.setDate(x.getDate() + diff);
-  return formatLocalDateKey(x);
-}
-
-function weekCountUpTo(habitId, dateKey, completions) {
-  const monday = getMondayKey(dateKey);
-  let n = 0;
-  for (const row of completions) {
-    const d = String(row.completed_date).slice(0, 10);
-    if (row.habit_id === habitId && d >= monday && d <= dateKey) {
-      n += 1;
-    }
-  }
-  return n;
-}
-
-function isHabitDueOnDate(habit, dateKey, completions) {
-  if (dateKey < habitCreatedDateKey(habit)) return false;
-
-  const d = parseDateKey(dateKey);
-  const dow = d.getDay();
-  const freq = (habit.frequency || 'daily').toLowerCase();
-
-  switch (freq) {
-    case 'daily':
-      return true;
-    case 'weekdays':
-      return dow >= 1 && dow <= 5;
-    case 'weekly':
-      return dow === getWeeklyDueDay(habit);
-    case 'xperweek': {
-      const target = habit.frequency_count ?? 1;
-      return weekCountUpTo(habit.id, dateKey, completions) < target;
-    }
-    default:
-      return true;
-  }
-}
-
-function completionsOnDate(completions, dateKey) {
-  const set = new Set();
-  for (const row of completions) {
-    if (String(row.completed_date).slice(0, 10) === dateKey) {
-      set.add(row.habit_id);
-    }
-  }
-  return set;
-}
-
-function getDayHabitStats(habits, completions, dateKey) {
-  const dueHabits = habits.filter((h) =>
-    isHabitDueOnDate(h, dateKey, completions)
-  );
-  if (dueHabits.length === 0) {
-    return { dot: null };
-  }
-
-  const doneSet = completionsOnDate(completions, dateKey);
-  const completed = dueHabits.filter((h) => doneSet.has(h.id)).length;
-  const due = dueHabits.length;
-  const pct = completed / due;
-
-  if (pct >= 0.5) return { dot: 'green' };
-  if (completed > 0) return { dot: 'gold' };
-  return { dot: 'red' };
-}
-
-function getCalendarGridDays(year, month) {
-  const firstOfMonth = new Date(year, month, 1);
-  const start = new Date(firstOfMonth);
-  const dow = start.getDay();
-  const diff = dow === 0 ? -6 : 1 - dow;
-  start.setDate(start.getDate() + diff);
-
-  const days = [];
-  const cursor = new Date(start);
-  for (let i = 0; i < 42; i++) {
-    days.push({
-      date: new Date(cursor),
-      key: formatLocalDateKey(cursor),
-      inMonth: cursor.getMonth() === month,
-    });
-    cursor.setDate(cursor.getDate() + 1);
-  }
-  return days;
-}
-
-function getMonthRangeKeys(year, month) {
-  const grid = getCalendarGridDays(year, month);
-  return { start: grid[0].key, end: grid[grid.length - 1].key };
-}
-
 function isFutureDate(dateKey, todayKey) {
   return dateKey > todayKey;
+}
+
+function buildFallbackJournalSummary(entry) {
+  const parts = [];
+  if (entry.one_thing) parts.push(`you set an intention around ${entry.one_thing}`);
+  if (entry.win_of_day) parts.push(`you noticed a win in ${entry.win_of_day}`);
+  if (entry.journal_note) parts.push(`your morning reflection shows ${entry.journal_note}`);
+  if (entry.evening_note) parts.push(`your evening reflection shows ${entry.evening_note}`);
+  if (entry.other_notes) parts.push(`you left space for ${entry.other_notes}`);
+
+  if (parts.length === 0) {
+    return 'You are someone who returns to reflection — and that practice is already part of who you are.';
+  }
+
+  return `You are someone who shows up in your own words today: ${parts.join(', ')}. That is who you are, not who you are trying to become.`;
 }
 
 function isWithinEditableWindow(dateKey, todayKey) {
@@ -198,12 +80,9 @@ function isWithinEditableWindow(dateKey, todayKey) {
   return diffDays <= 7;
 }
 
-function shiftMonth(dateKey, delta) {
+function shiftDay(dateKey, delta) {
   const d = parseDateKey(dateKey);
-  const day = d.getDate();
-  d.setMonth(d.getMonth() + delta);
-  const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
-  d.setDate(Math.min(day, lastDay));
+  d.setDate(d.getDate() + delta);
   return formatLocalDateKey(d);
 }
 
@@ -211,16 +90,6 @@ function dayName(dateKey) {
   return parseDateKey(dateKey).toLocaleDateString('en-US', {
     weekday: 'long',
   });
-}
-
-function dateSubtitleUpper(dateKey) {
-  return parseDateKey(dateKey)
-    .toLocaleDateString('en-US', {
-      month: 'long',
-      day: 'numeric',
-      year: 'numeric',
-    })
-    .toUpperCase();
 }
 
 function isOtherNotesColumnError(error) {
@@ -234,150 +103,13 @@ function isOtherNotesColumnError(error) {
   );
 }
 
-function ThinDivider({ style }) {
-  return <View style={[styles.thinDivider, style]} />;
-}
-
-function SacredDivider() {
-  return (
-    <View style={styles.sacredDividerRow}>
-      <View style={styles.sacredDividerLine} />
-      <Text style={styles.sacredDividerStar}>✦</Text>
-      <View style={styles.sacredDividerLine} />
-    </View>
-  );
-}
-
-function MonthCalendar({
-  year,
-  month,
-  todayKey,
-  selectedDateKey,
-  habits,
-  completions,
-  loading,
-  onSelectDate,
-  onPrevMonth,
-  onNextMonth,
-  onClose,
-}) {
-  const calendarDays = useMemo(
-    () => getCalendarGridDays(year, month),
-    [year, month]
-  );
-
-  const dotByDate = useMemo(() => {
-    const map = new Map();
-    for (const day of calendarDays) {
-      if (!day.inMonth || isFutureDate(day.key, todayKey)) {
-        map.set(day.key, null);
-        continue;
-      }
-      const stats = getDayHabitStats(habits, completions, day.key);
-      map.set(day.key, stats.dot);
-    }
-    return map;
-  }, [calendarDays, habits, completions, todayKey]);
-
-  const monthTitle = `${MONTH_NAMES[month]} ${year}`;
-
-  return (
-    <View style={styles.modalCalendar}>
-      <View style={styles.modalTopRow}>
-        <View style={styles.modalTopSpacer} />
-        <TouchableOpacity
-          onPress={onClose}
-          style={styles.modalCloseBtn}
-          accessibilityLabel="Close calendar">
-          <Text style={styles.modalCloseText}>✕</Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.modalCalHeader}>
-        <TouchableOpacity
-          onPress={onPrevMonth}
-          style={styles.calNavBtn}
-          accessibilityLabel="Previous month">
-          <Text style={styles.calNavArrow}>←</Text>
-        </TouchableOpacity>
-        <Text style={styles.modalCalTitle}>{monthTitle}</Text>
-        <TouchableOpacity
-          onPress={onNextMonth}
-          style={styles.calNavBtn}
-          accessibilityLabel="Next month">
-          <Text style={styles.calNavArrow}>→</Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.weekHeaderRow}>
-        {WEEKDAY_HEADERS.map((label) => (
-          <Text key={label} style={styles.weekHeader}>
-            {label}
-          </Text>
-        ))}
-      </View>
-
-      {loading ? (
-        <ActivityIndicator color={J.accent} style={styles.calLoader} size="small" />
-      ) : (
-        <View style={styles.calGrid}>
-          {calendarDays.map((day) => {
-            const isToday = day.key === todayKey;
-            const isSelected = day.key === selectedDateKey;
-            const isFutureDay = isFutureDate(day.key, todayKey);
-            const dot = dotByDate.get(day.key);
-
-            return (
-              <TouchableOpacity
-                key={day.key}
-                style={styles.dayCell}
-                onPress={() => onSelectDate(day.key)}
-                activeOpacity={0.7}
-                disabled={isFutureDay}>
-                <View
-                  style={[
-                    styles.dayNumberWrap,
-                    isToday && styles.dayTodayCircle,
-                    isSelected && !isToday && styles.daySelectedRing,
-                  ]}>
-                  <Text
-                    style={[
-                      styles.dayNumber,
-                      !day.inMonth && styles.dayNumberOutMonth,
-                      isFutureDay && styles.dayNumberFuture,
-                    ]}>
-                    {day.date.getDate()}
-                  </Text>
-                </View>
-                {dot ? (
-                  <View
-                    style={[styles.dayDot, { backgroundColor: DOT_COLORS[dot] }]}
-                  />
-                ) : (
-                  <View style={styles.dayDotPlaceholder} />
-                )}
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-      )}
-    </View>
-  );
-}
-
 export default function JournalScreen() {
   const todayKey = useMemo(() => formatLocalDateKey(new Date()), []);
 
   const [userId, setUserId] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedDateKey, setSelectedDateKey] = useState(todayKey);
-  const [calendarOpen, setCalendarOpen] = useState(false);
-  const [modalYear, setModalYear] = useState(() => new Date().getFullYear());
-  const [modalMonth, setModalMonth] = useState(() => new Date().getMonth());
 
-  const [habits, setHabits] = useState([]);
-  const [monthCompletions, setMonthCompletions] = useState([]);
-  const [calendarLoading, setCalendarLoading] = useState(true);
   const [entryLoading, setEntryLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savedFlash, setSavedFlash] = useState(false);
@@ -387,72 +119,46 @@ export default function JournalScreen() {
   const [reflectionTheme, setReflectionTheme] = useState(null);
 
   const [oneThing, setOneThing] = useState('');
+  const [reflectionAnswer, setReflectionAnswer] = useState('');
   const [morningNote, setMorningNote] = useState('');
   const [oneWin, setOneWin] = useState('');
   const [sleepHours, setSleepHours] = useState('');
   const [eveningNote, setEveningNote] = useState('');
   const [aiSummary, setAiSummary] = useState(null);
   const [aiLoading, setAiLoading] = useState(false);
+  const [journalSummary, setJournalSummary] = useState('');
+  const [summaryLoading, setSummaryLoading] = useState(false);
+  const [journalReflectActive, setJournalReflectActive] = useState(false);
   const [otherNotes, setOtherNotes] = useState('');
   const [otherNotesExpanded, setOtherNotesExpanded] = useState(false);
 
   const otherNotesDebounceRef = useRef(null);
 
-  const selectedYear = useMemo(
-    () => parseDateKey(selectedDateKey).getFullYear(),
-    [selectedDateKey]
-  );
-  const selectedMonth = useMemo(
-    () => parseDateKey(selectedDateKey).getMonth(),
-    [selectedDateKey]
-  );
-
   const isFuture = isFutureDate(selectedDateKey, todayKey);
+  const isToday = selectedDateKey === todayKey;
   const isEditable = isWithinEditableWindow(selectedDateKey, todayKey);
   const isReadOnly = !isFuture && !isEditable;
   const inputEditable = isEditable && !entryLoading;
   const dimmed = isReadOnly;
 
-  const topBarMonthLabel = useMemo(() => {
-    const d = parseDateKey(selectedDateKey);
-    return `${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}`;
-  }, [selectedDateKey]);
+  const dateNavLabel = useMemo(() => {
+    if (selectedDateKey === todayKey) return 'Today';
+    return parseDateKey(selectedDateKey).toLocaleDateString('en-US', {
+      weekday: 'long',
+      month: 'long',
+      day: 'numeric',
+    });
+  }, [selectedDateKey, todayKey]);
 
-  const loadCalendarData = useCallback(async () => {
-    setCalendarLoading(true);
+  const reflectionHeaderTitle = useMemo(() => {
+    if (selectedDateKey === todayKey) return "Today's Reflection";
+    return `${dayName(selectedDateKey)}'s Reflection`;
+  }, [selectedDateKey, todayKey]);
+
+  const loadUser = useCallback(async () => {
     const { data: userData } = await supabase.auth.getUser();
-    const uid = userData?.user?.id;
-    if (!uid) {
-      setUserId(null);
-      setHabits([]);
-      setMonthCompletions([]);
-      setCalendarLoading(false);
-      return;
-    }
-    setUserId(uid);
-
-    const year = calendarOpen ? modalYear : selectedYear;
-    const month = calendarOpen ? modalMonth : selectedMonth;
-    const { start, end } = getMonthRangeKeys(year, month);
-
-    const [{ data: habitsData }, { data: completionData }] = await Promise.all([
-      supabase
-        .from('habits')
-        .select('*')
-        .eq('user_id', uid)
-        .eq('status', 'active'),
-      supabase
-        .from('habit_completions')
-        .select('*')
-        .eq('user_id', uid)
-        .gte('completed_date', start)
-        .lte('completed_date', end),
-    ]);
-
-    setHabits(habitsData ?? []);
-    setMonthCompletions(completionData ?? []);
-    setCalendarLoading(false);
-  }, [calendarOpen, modalYear, modalMonth, selectedYear, selectedMonth]);
+    setUserId(userData?.user?.id ?? null);
+  }, []);
 
   const loadReflectionPrompt = useCallback(async () => {
     const today = new Date();
@@ -483,7 +189,8 @@ export default function JournalScreen() {
 
     const notes = data?.other_notes ?? '';
     setOneThing(data?.one_thing ?? '');
-    setMorningNote(data?.journal_note ?? '');
+    setReflectionAnswer(data?.journal_note ?? '');
+    setMorningNote('');
     setOneWin(data?.win_of_day ?? '');
     setSleepHours(
       data?.sleep_hours != null && data?.sleep_hours !== ''
@@ -493,7 +200,7 @@ export default function JournalScreen() {
     setEveningNote(data?.evening_note ?? '');
     setAiSummary(data?.ai_daily_summary ?? null);
     setOtherNotes(notes);
-    setOtherNotesExpanded(Boolean(notes?.trim()));
+    setOtherNotesExpanded(false);
     setEntryLoading(false);
   }, [userId, selectedDateKey]);
 
@@ -531,17 +238,17 @@ export default function JournalScreen() {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await loadCalendarData();
+    await loadUser();
     await loadReflectionPrompt();
     await loadEntry();
     setRefreshing(false);
-  }, [loadCalendarData, loadReflectionPrompt, loadEntry]);
+  }, [loadUser, loadReflectionPrompt, loadEntry]);
 
   useFocusEffect(
     useCallback(() => {
-      loadCalendarData();
+      loadUser();
       loadReflectionPrompt();
-    }, [loadCalendarData, loadReflectionPrompt])
+    }, [loadUser, loadReflectionPrompt])
   );
 
   useEffect(() => {
@@ -549,16 +256,10 @@ export default function JournalScreen() {
   }, [userId, selectedDateKey, loadEntry]);
 
   useEffect(() => {
-    if (calendarOpen) {
-      loadCalendarData();
-    }
-  }, [calendarOpen, modalYear, modalMonth, loadCalendarData]);
-
-  useEffect(() => {
-    if (userId && !calendarOpen) {
-      loadCalendarData();
-    }
-  }, [userId, selectedYear, selectedMonth, calendarOpen, loadCalendarData]);
+    setJournalReflectActive(false);
+    setJournalSummary('');
+    setSummaryLoading(false);
+  }, [selectedDateKey]);
 
   useEffect(() => {
     if (!savedFlash) return undefined;
@@ -575,51 +276,63 @@ export default function JournalScreen() {
     []
   );
 
-  const openCalendar = () => {
-    const d = parseDateKey(selectedDateKey);
-    setModalYear(d.getFullYear());
-    setModalMonth(d.getMonth());
-    setCalendarOpen(true);
+  const goPrevDay = () => {
+    setSelectedDateKey((k) => shiftDay(k, -1));
   };
 
-  const selectDateFromCalendar = (key) => {
-    if (isFutureDate(key, todayKey)) return;
-    setSelectedDateKey(key);
-    setCalendarOpen(false);
-  };
-
-  const goPrevMonthTop = () => {
-    setSelectedDateKey((k) => shiftMonth(k, -1));
-  };
-
-  const goNextMonthTop = () => {
-    const next = shiftMonth(selectedDateKey, 1);
+  const goNextDay = () => {
+    const next = shiftDay(selectedDateKey, 1);
     if (!isFutureDate(next, todayKey)) {
       setSelectedDateKey(next);
-    }
-  };
-
-  const goPrevMonthModal = () => {
-    if (modalMonth === 0) {
-      setModalMonth(11);
-      setModalYear((y) => y - 1);
-    } else {
-      setModalMonth((m) => m - 1);
-    }
-  };
-
-  const goNextMonthModal = () => {
-    if (modalMonth === 11) {
-      setModalMonth(0);
-      setModalYear((y) => y + 1);
-    } else {
-      setModalMonth((m) => m + 1);
     }
   };
 
   const toggleOtherThoughts = () => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setOtherNotesExpanded((v) => !v);
+  };
+
+  const generateJournalSummary = async (entry) => {
+    const parts = [];
+    if (entry.one_thing) parts.push(`Intention: ${entry.one_thing}`);
+    if (entry.win_of_day) parts.push(`Win: ${entry.win_of_day}`);
+    if (entry.journal_note) parts.push(`Morning reflection: ${entry.journal_note}`);
+    if (entry.evening_note) parts.push(`Evening reflection: ${entry.evening_note}`);
+    if (entry.other_notes) parts.push(`Other thoughts: ${entry.other_notes}`);
+    if (parts.length === 0) return;
+
+    const fallback = buildFallbackJournalSummary(entry);
+
+    try {
+      setSummaryLoading(true);
+      const prompt = `You are Meridian, a warm life companion. Read this journal entry and write exactly 2 warm, specific sentences directly to this person. Be personal and grounded in what they actually wrote. Never end with a general statement about identity or who they are. Never summarize their character. Just reflect their day back to them warmly and specifically.
+
+Journal entry: ${parts.join('. ')}`;
+
+      const { data, error: invokeError } = await supabase.functions.invoke(
+        'anthropic',
+        {
+          body: {
+            model: 'claude-haiku-4-5-20251001',
+            max_tokens: 300,
+            messages: [{ role: 'user', content: prompt }],
+          },
+        }
+      );
+
+      if (invokeError) {
+        console.log('Journal summary error:', invokeError);
+        setJournalSummary(fallback);
+      } else {
+        const summaryText = data?.content?.[0]?.text ?? null;
+        setJournalSummary(summaryText || fallback);
+      }
+    } catch (e) {
+      console.log('Journal summary error:', e);
+      setJournalSummary(fallback);
+    } finally {
+      setSummaryLoading(false);
+    }
   };
 
   const handleSave = async () => {
@@ -632,7 +345,7 @@ export default function JournalScreen() {
       user_id: userId,
       entry_date: selectedDateKey,
       one_thing: oneThing.trim() || null,
-      journal_note: morningNote.trim() || null,
+      journal_note: reflectionAnswer.trim() || null,
       win_of_day: oneWin.trim() || null,
       sleep_hours: sleepVal,
       evening_note: eveningNote.trim() || null,
@@ -665,6 +378,15 @@ export default function JournalScreen() {
       setSaving(false);
       if (!retryError) {
         setSavedFlash(true);
+        setJournalReflectActive(true);
+        setSummaryLoading(true);
+        generateJournalSummary({
+          one_thing: payload.one_thing,
+          win_of_day: payload.win_of_day,
+          journal_note: payload.journal_note,
+          evening_note: payload.evening_note,
+          other_notes: payload.other_notes,
+        });
         await loadEntry();
         if (eveningNote.trim()) {
           generateDailySummary();
@@ -676,6 +398,15 @@ export default function JournalScreen() {
     setSaving(false);
     if (!error) {
       setSavedFlash(true);
+      setJournalReflectActive(true);
+      setSummaryLoading(true);
+      generateJournalSummary({
+        one_thing: payload.one_thing,
+        win_of_day: payload.win_of_day,
+        journal_note: payload.journal_note,
+        evening_note: payload.evening_note,
+        other_notes: payload.other_notes,
+      });
       await loadEntry();
       if (eveningNote.trim()) {
         generateDailySummary();
@@ -750,31 +481,6 @@ Write a 2-3 sentence Reflective Mirror summary of what today's data shows about 
 
   return (
     <SafeAreaView style={styles.safe} edges={['left', 'right']}>
-      <View style={styles.topBar}>
-        <TouchableOpacity
-          onPress={goPrevMonthTop}
-          style={styles.topBarNavBtn}
-          activeOpacity={0.7}
-          accessibilityLabel="Previous month">
-          <Text style={styles.topBarArrow}>←</Text>
-        </TouchableOpacity>
-        <Text style={styles.topBarMonth}>{topBarMonthLabel}</Text>
-        <TouchableOpacity
-          onPress={goNextMonthTop}
-          style={styles.topBarNavBtn}
-          activeOpacity={0.7}
-          accessibilityLabel="Next month">
-          <Text style={styles.topBarArrow}>→</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          onPress={openCalendar}
-          style={styles.calendarBtn}
-          activeOpacity={0.7}
-          accessibilityLabel="Open calendar">
-          <Text style={styles.calendarIcon}>▦</Text>
-        </TouchableOpacity>
-      </View>
-
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -792,10 +498,24 @@ Write a 2-3 sentence Reflective Mirror summary of what today's data shows about 
             colors={['#a78bfa']}
           />
         }>
-        <Text style={styles.dayName}>{dayName(selectedDateKey)}</Text>
-        <Text style={styles.dateLine}>{dateSubtitleUpper(selectedDateKey)}</Text>
-
-        <View style={styles.headerDivider} />
+        <View style={styles.dateNav}>
+          <TouchableOpacity
+            onPress={goPrevDay}
+            style={styles.dateNavBtn}
+            activeOpacity={0.7}
+            accessibilityLabel="Previous day">
+            <Text style={styles.dateNavArrow}>←</Text>
+          </TouchableOpacity>
+          <Text style={styles.dateNavLabel}>{dateNavLabel}</Text>
+          <TouchableOpacity
+            onPress={goNextDay}
+            style={styles.dateNavBtn}
+            activeOpacity={0.7}
+            disabled={isToday}
+            accessibilityLabel="Next day">
+            <Text style={[styles.dateNavArrow, isToday && styles.dateNavArrowDisabled]}>→</Text>
+          </TouchableOpacity>
+        </View>
 
         {isFuture ? (
           <Text style={styles.futureMessage}>This day is still ahead of you.</Text>
@@ -807,152 +527,104 @@ Write a 2-3 sentence Reflective Mirror summary of what today's data shows about 
           />
         ) : (
           <>
-            <Text style={styles.sectionLabel}>THIS MORNING</Text>
+            <Text style={styles.reflectionHeader}>{reflectionHeaderTitle}</Text>
 
-            <Text style={[styles.fieldLabel, styles.padH]}>HOURS SLEPT</Text>
+            <View style={styles.promptCard}>
+              <Text style={styles.promptText}>
+                {reflectionPrompt ||
+                  (reflectionTheme
+                    ? `Theme: ${reflectionTheme}`
+                    : 'Take a breath. What is true for you right now?')}
+              </Text>
+            </View>
+
+            <Text style={styles.fieldLabel}>Your reflection</Text>
             <TextInput
-              style={[styles.sleepInput, dimmed && styles.dimmed]}
-              placeholder="e.g. 7.5"
+              style={[styles.textInput, styles.textInputMultiline, dimmed && styles.dimmed]}
+              placeholder="Write your thoughts here..."
               placeholderTextColor={J.placeholder}
-              value={sleepHours}
-              onChangeText={(val) => {
-                if (!inputEditable) return;
-                const clean = val.replace(/[^0-9.]/g, '');
-                setSleepHours(clean);
-              }}
-              keyboardType="decimal-pad"
-              editable={inputEditable}
-              maxLength={4}
-            />
-
-            <ThinDivider style={styles.dividerTight} />
-
-            <Text style={[styles.accentFieldLabel, styles.padH, styles.reflectionLabelTop]}>
-              TODAY&apos;S REFLECTION
-            </Text>
-            <Text style={[styles.promptText, styles.padH]}>
-              {reflectionPrompt ||
-                (reflectionTheme
-                  ? `Theme: ${reflectionTheme}`
-                  : 'Take a breath. What is true for you right now?')}
-            </Text>
-
-            <Text style={[styles.fieldLabel, styles.padH]}>YOUR REFLECTION</Text>
-            <TextInput
-              style={[styles.multilineInput, styles.padH, dimmed && styles.dimmed]}
-              placeholder="Write your response..."
-              placeholderTextColor={J.placeholder}
-              value={morningNote}
-              onChangeText={setMorningNote}
+              value={reflectionAnswer}
+              onChangeText={setReflectionAnswer}
               multiline
+              numberOfLines={4}
               textAlignVertical="top"
               editable={inputEditable}
             />
 
-            <ThinDivider style={styles.dividerSection} />
+            <Text style={[styles.sectionLabel, styles.sectionSpaced]}>MORNING</Text>
 
-            <Text style={[styles.fieldLabel, styles.padH]}>WHAT MATTERS MOST TODAY</Text>
+            <Text style={styles.fieldLabel}>My intention for today</Text>
             <TextInput
-              style={[styles.oneThingInput, dimmed && styles.dimmed]}
-              placeholder="The one thing..."
+              style={[styles.textInput, dimmed && styles.dimmed]}
+              placeholder="I intend to..."
               placeholderTextColor={J.placeholder}
               value={oneThing}
               onChangeText={setOneThing}
               editable={inputEditable}
             />
 
-            <SacredDivider />
-
-            <Text style={styles.sectionLabel}>THIS EVENING</Text>
-
-            <Text style={[styles.fieldLabel, styles.padH]}>A MOMENT THAT MATTERED</Text>
+            <Text style={[styles.fieldLabel, styles.fieldLabelSpaced]}>Hours of sleep</Text>
             <TextInput
-              style={[
-                styles.multilineInput,
-                styles.multilineMoment,
-                styles.padH,
-                dimmed && styles.dimmed,
-              ]}
-              placeholder="A moment of showing up today..."
+              style={[styles.textInput, dimmed && styles.dimmed]}
+              placeholder="7.5"
               placeholderTextColor={J.placeholder}
-              value={oneWin}
-              onChangeText={setOneWin}
+              value={sleepHours}
+              onChangeText={setSleepHours}
+              keyboardType="decimal-pad"
+              editable={inputEditable}
+              maxLength={4}
+            />
+
+            <Text style={[styles.fieldLabel, styles.fieldLabelSpaced]}>Morning reflection</Text>
+            <TextInput
+              style={[styles.textInput, styles.textInputMultiline, dimmed && styles.dimmed]}
+              placeholder="What's on your mind..."
+              placeholderTextColor={J.placeholder}
+              value={morningNote}
+              onChangeText={setMorningNote}
               multiline
+              numberOfLines={4}
               textAlignVertical="top"
               editable={inputEditable}
             />
 
-            <ThinDivider style={styles.dividerSection} />
+            <Text style={[styles.sectionLabel, styles.sectionSpaced]}>EVENING</Text>
 
-            <Text style={[styles.fieldLabel, styles.padH]}>EVENING REFLECTION</Text>
+            <Text style={styles.fieldLabel}>A win from today</Text>
             <TextInput
-              style={[styles.multilineInput, styles.padH, dimmed && styles.dimmed]}
-              placeholder="How did today unfold?"
+              style={[styles.textInput, dimmed && styles.dimmed]}
+              placeholder="Today I showed up by..."
+              placeholderTextColor={J.placeholder}
+              value={oneWin}
+              onChangeText={setOneWin}
+              editable={inputEditable}
+            />
+
+            <Text style={[styles.fieldLabel, styles.fieldLabelSpaced]}>Evening reflection</Text>
+            <TextInput
+              style={[styles.textInput, styles.textInputMultiline, dimmed && styles.dimmed]}
+              placeholder="How did today feel..."
               placeholderTextColor={J.placeholder}
               value={eveningNote}
               onChangeText={setEveningNote}
               multiline
+              numberOfLines={4}
               textAlignVertical="top"
               editable={inputEditable}
             />
 
-            {(aiSummary || aiLoading) && (
-              <View style={{
-                marginHorizontal: 16,
-                marginTop: 20,
-                backgroundColor: '#231f35',
-                borderRadius: 12,
-                padding: 16,
-                borderWidth: 1,
-                borderColor: '#2a2040',
-              }}>
-                <Text style={{
-                  color: '#6b5fa0',
-                  fontSize: 10,
-                  letterSpacing: 1.5,
-                  fontFamily: 'DMSans_500Medium',
-                  marginBottom: 8,
-                }}>✦ TODAY'S REFLECTION</Text>
-                {aiLoading ? (
-                  <Text style={{
-                    color: '#9d8ec0',
-                    fontSize: 14,
-                    fontFamily: 'DMSans_400Regular',
-                    fontStyle: 'italic',
-                  }}>Reflecting on your day...</Text>
-                ) : (
-                  <Text style={{
-                    color: '#f5f3ff',
-                    fontSize: 15,
-                    fontFamily: 'DMSans_400Regular',
-                    lineHeight: 22,
-                  }}>{aiSummary}</Text>
-                )}
-              </View>
-            )}
-
-            <View style={styles.otherThoughtsWrap}>
+            {!otherNotesExpanded ? (
               <TouchableOpacity
-                style={styles.otherThoughtsToggle}
+                style={styles.otherThoughtsLinkWrap}
                 onPress={toggleOtherThoughts}
                 activeOpacity={0.7}
                 disabled={isFuture}>
-                <Text style={styles.otherThoughtsToggleText}>
-                  · · ·  other thoughts  · · ·
-                </Text>
+                <Text style={styles.otherThoughtsLink}>+ Other thoughts</Text>
               </TouchableOpacity>
-            </View>
-
-            {otherNotesExpanded ? (
-              <View>
-                <Text style={[styles.fieldLabel, styles.padH]}>OTHER THOUGHTS</Text>
+            ) : (
+              <View style={styles.otherNotesExpanded}>
                 <TextInput
-                  style={[
-                    styles.multilineInput,
-                    styles.multilineTall,
-                    styles.padH,
-                    dimmed && styles.dimmed,
-                  ]}
+                  style={[styles.textInput, styles.textInputMultiline, dimmed && styles.dimmed]}
                   placeholder="Anything else on your mind..."
                   placeholderTextColor={J.placeholder}
                   value={otherNotes}
@@ -962,7 +634,7 @@ Write a 2-3 sentence Reflective Mirror summary of what today's data shows about 
                   editable={inputEditable && otherNotesSupported}
                 />
               </View>
-            ) : null}
+            )}
 
             {isReadOnly ? (
               <Text style={styles.readOnlyHint}>
@@ -985,38 +657,25 @@ Write a 2-3 sentence Reflective Mirror summary of what today's data shows about 
                 ) : null}
               </View>
             ) : null}
+
+            {journalReflectActive ? (
+              <View style={styles.journalReflectCard}>
+                <Text style={styles.journalReflectLabel}>
+                  MERIDIAN REFLECTS
+                </Text>
+                {summaryLoading ? (
+                  <Text style={styles.journalReflectLoadingText}>
+                    Reflecting on your day...
+                  </Text>
+                ) : (
+                  <Text style={styles.journalReflectText}>{journalSummary}</Text>
+                )}
+              </View>
+            ) : null}
           </>
         )}
       </ScrollView>
       </KeyboardAvoidingView>
-
-      <Modal
-        visible={calendarOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setCalendarOpen(false)}>
-        <View style={styles.modalBackdrop}>
-          <Pressable
-            style={StyleSheet.absoluteFill}
-            onPress={() => setCalendarOpen(false)}
-          />
-          <View style={styles.modalSheet}>
-            <MonthCalendar
-              year={modalYear}
-              month={modalMonth}
-              todayKey={todayKey}
-              selectedDateKey={selectedDateKey}
-              habits={habits}
-              completions={monthCompletions}
-              loading={calendarLoading}
-              onSelectDate={selectDateFromCalendar}
-              onPrevMonth={goPrevMonthModal}
-              onNextMonth={goNextMonthModal}
-              onClose={() => setCalendarOpen(false)}
-            />
-          </View>
-        </View>
-      </Modal>
     </SafeAreaView>
   );
 }
@@ -1026,234 +685,105 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: J.bg,
   },
-  topBar: {
+  dateNav: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
+    justifyContent: 'space-between',
+    paddingTop: 12,
+    paddingBottom: 8,
   },
-  topBarNavBtn: {
-    paddingHorizontal: 4,
-    paddingVertical: 4,
+  dateNavBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    minWidth: 44,
+    alignItems: 'center',
   },
-  topBarArrow: {
+  dateNavArrow: {
     color: J.accent,
-    fontSize: 16,
-    fontFamily: 'DMSans_400Regular',
+    fontSize: 22,
   },
-  topBarMonth: {
-    color: J.muted,
-    fontSize: 13,
-    fontFamily: 'DMSans_400Regular',
-    marginHorizontal: 8,
+  dateNavArrowDisabled: {
+    opacity: 0.25,
+  },
+  dateNavLabel: {
     flex: 1,
+    fontSize: 16,
+    color: J.text,
+    fontFamily: 'PlayfairDisplay_300Light',
     textAlign: 'center',
-  },
-  calendarBtn: {
-    padding: 4,
-    marginLeft: 4,
-  },
-  calendarIcon: {
-    color: J.muted,
-    fontSize: 18,
-    fontFamily: 'DMSans_400Regular',
   },
   scroll: {
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: 24,
+    paddingHorizontal: 24,
+    paddingBottom: 32,
   },
-  dayName: {
+  reflectionHeader: {
+    fontSize: 28,
     fontFamily: 'PlayfairDisplay_300Light',
-    fontSize: 36,
     color: J.text,
-    paddingHorizontal: 24,
-    paddingTop: 8,
+    marginBottom: 4,
   },
-  dateLine: {
-    fontFamily: 'DMSans_400Regular',
-    fontSize: 11,
-    color: J.muted,
-    letterSpacing: 3,
-    paddingHorizontal: 24,
-    marginBottom: 20,
-  },
-  headerDivider: {
-    height: 1,
-    backgroundColor: J.divider,
-    marginHorizontal: 24,
+  promptCard: {
+    backgroundColor: J.surface,
+    borderRadius: 12,
+    padding: 16,
+    borderLeftWidth: 3,
+    borderLeftColor: J.accent,
     marginBottom: 24,
-  },
-  padH: {
-    paddingHorizontal: 24,
-  },
-  sectionLabel: {
-    fontFamily: 'DMSans_500Medium',
-    fontSize: 10,
-    color: J.accent,
-    letterSpacing: 2,
-    textTransform: 'uppercase',
-    paddingHorizontal: 24,
-    marginBottom: 20,
-  },
-  fieldLabel: {
-    fontFamily: 'DMSans_400Regular',
-    fontSize: 10,
-    color: J.muted,
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-    marginBottom: 10,
-  },
-  accentFieldLabel: {
-    fontFamily: 'DMSans_500Medium',
-    fontSize: 10,
-    color: J.accent,
-    letterSpacing: 2,
-    textTransform: 'uppercase',
-    marginBottom: 12,
-  },
-  reflectionLabelTop: {
-    marginTop: 24,
-  },
-  thinDivider: {
-    height: 1,
-    backgroundColor: J.divider,
-    marginHorizontal: 24,
-  },
-  dividerTight: {
-    marginVertical: 4,
-  },
-  dividerSection: {
-    marginVertical: 20,
   },
   promptText: {
-    fontFamily: 'PlayfairDisplay_700Bold',
-    fontSize: 18,
-    color: J.prompt,
-    lineHeight: 28,
-    paddingHorizontal: 24,
-    marginBottom: 20,
-    fontStyle: 'italic',
-  },
-  lineInput: {
-    paddingHorizontal: 24,
-    paddingVertical: 14,
-    backgroundColor: 'transparent',
-    borderBottomWidth: 1,
-    borderBottomColor: J.divider,
-    color: J.text,
-    fontFamily: 'DMSans_400Regular',
-    fontSize: 16,
-    fontStyle: 'italic',
-    marginBottom: 0,
-  },
-  oneThingInput: {
-    backgroundColor: '#1a1628',
-    borderWidth: 1,
-    borderColor: '#2a2040',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    marginHorizontal: 16,
-    color: J.text,
-    fontFamily: 'DMSans_400Regular',
-    fontSize: 16,
-    fontStyle: 'italic',
-    marginBottom: 0,
-  },
-  multilineInput: {
-    minHeight: 160,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    backgroundColor: '#1a1628',
-    color: J.text,
     fontFamily: 'DMSans_400Regular',
     fontSize: 15,
-    lineHeight: 24,
-    borderWidth: 1,
-    borderColor: '#2a2040',
-    borderRadius: 12,
-    textAlignVertical: 'top',
-    marginBottom: 0,
-    marginHorizontal: 16,
-  },
-  multilineMoment: {
-    minHeight: 100,
-  },
-  multilineTall: {
-    minHeight: 200,
-  },
-  sleepInput: {
-    backgroundColor: '#1a1628',
-    color: J.text,
-    fontFamily: 'DMSans_400Regular',
-    fontSize: 15,
-    borderWidth: 1,
-    borderColor: '#2a2040',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    marginHorizontal: 16,
-  },
-  sleepRow: {
-    paddingHorizontal: 24,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 20,
-    marginBottom: 24,
-  },
-  sleepBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    borderWidth: 1,
-    borderColor: J.accent + '50',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'transparent',
-  },
-  sleepBtnText: {
     color: J.accent,
-    fontSize: 18,
+    lineHeight: 24,
+    fontStyle: 'italic',
   },
-  sleepValue: {
-    fontFamily: 'DMSans_400Regular',
-    fontSize: 16,
-    color: J.text,
-  },
-  sacredDividerRow: {
-    marginVertical: 40,
-    paddingHorizontal: 24,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  sacredDividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: J.divider,
-  },
-  sacredDividerStar: {
-    color: J.muted + '80',
+  sectionLabel: {
     fontSize: 10,
-    letterSpacing: 4,
-    marginHorizontal: 16,
-    fontFamily: 'DMSans_400Regular',
-  },
-  otherThoughtsWrap: {
-    marginTop: 32,
-    marginBottom: 8,
-    alignItems: 'center',
-  },
-  otherThoughtsToggle: {
-    paddingVertical: 20,
-    alignItems: 'center',
-  },
-  otherThoughtsToggleText: {
-    fontFamily: 'DMSans_400Regular',
+    letterSpacing: 3,
     color: J.muted,
-    fontSize: 11,
-    letterSpacing: 4,
+    fontFamily: 'DMSans_500Medium',
+    marginBottom: 12,
+  },
+  sectionSpaced: {
+    marginTop: 24,
+  },
+  fieldLabel: {
+    fontSize: 12,
+    color: '#9d8ec0',
+    fontFamily: 'DMSans_500Medium',
+    marginBottom: 6,
+  },
+  fieldLabelSpaced: {
+    marginTop: 16,
+  },
+  textInput: {
+    backgroundColor: J.surface,
+    borderRadius: 12,
+    padding: 16,
+    color: J.text,
+    fontSize: 15,
+    fontFamily: 'DMSans_400Regular',
+    borderWidth: 1,
+    borderColor: J.divider,
+  },
+  textInputMultiline: {
+    minHeight: 100,
+    textAlignVertical: 'top',
+  },
+  otherThoughtsLinkWrap: {
+    marginTop: 24,
+    alignItems: 'center',
+  },
+  otherThoughtsLink: {
+    color: J.muted,
+    fontSize: 13,
+    fontFamily: 'DMSans_400Regular',
+  },
+  otherNotesExpanded: {
+    marginTop: 24,
   },
   futureMessage: {
     fontSize: 15,
@@ -1279,24 +809,57 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     paddingHorizontal: 24,
   },
+  journalReflectCard: {
+    backgroundColor: '#231f35',
+    borderRadius: 16,
+    padding: 20,
+    marginHorizontal: 16,
+    marginTop: 16,
+    marginBottom: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: J.accent,
+    zIndex: 2,
+    elevation: 2,
+  },
+  journalReflectLabel: {
+    fontSize: 10,
+    letterSpacing: 2,
+    color: J.accent,
+    marginBottom: 8,
+    fontFamily: 'DMSans_500Medium',
+  },
+  journalReflectText: {
+    fontSize: 15,
+    color: J.text,
+    fontStyle: 'italic',
+    fontFamily: 'DMSans_400Regular',
+    lineHeight: 24,
+  },
+  journalReflectLoadingText: {
+    fontSize: 14,
+    color: J.muted,
+    fontStyle: 'italic',
+    fontFamily: 'DMSans_400Regular',
+  },
   saveWrap: {
-    marginHorizontal: 24,
-    marginTop: 40,
-    marginBottom: 60,
+    marginTop: 24,
+    marginBottom: 8,
   },
   saveBtn: {
     backgroundColor: J.accent,
     borderRadius: 12,
     padding: 16,
     alignItems: 'center',
+    width: '100%',
   },
   saveBtnDisabled: {
     opacity: 0.6,
   },
   saveBtnText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#0f0d1a',
     fontFamily: 'DMSans_500Medium',
-    fontSize: 14,
-    color: '#ffffff',
     textAlign: 'center',
   },
   savedFlash: {
@@ -1305,119 +868,5 @@ const styles = StyleSheet.create({
     color: J.accent,
     textAlign: 'center',
     marginTop: 8,
-  },
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: '#000000cc',
-    justifyContent: 'center',
-    paddingHorizontal: 20,
-  },
-  modalSheet: {
-    backgroundColor: J.bg,
-    borderRadius: 20,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: J.divider,
-  },
-  modalCalendar: {},
-  modalTopRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  modalTopSpacer: {
-    flex: 1,
-  },
-  modalCloseBtn: {
-    padding: 8,
-  },
-  modalCloseText: {
-    color: J.muted,
-    fontSize: 18,
-    fontFamily: 'DMSans_400Regular',
-  },
-  modalCalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-  },
-  modalCalTitle: {
-    flex: 1,
-    textAlign: 'center',
-    color: J.text,
-    fontSize: 14,
-    fontFamily: 'DMSans_500Medium',
-    letterSpacing: 1,
-  },
-  calNavBtn: {
-    padding: 8,
-    minWidth: 40,
-    alignItems: 'center',
-  },
-  calNavArrow: {
-    color: J.accent,
-    fontSize: 18,
-    fontFamily: 'DMSans_400Regular',
-  },
-  weekHeaderRow: {
-    flexDirection: 'row',
-    marginBottom: 8,
-  },
-  weekHeader: {
-    flex: 1,
-    textAlign: 'center',
-    fontSize: 10,
-    color: J.muted,
-    fontFamily: 'DMSans_400Regular',
-  },
-  calLoader: {
-    paddingVertical: 24,
-  },
-  calGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-  },
-  dayCell: {
-    width: `${100 / 7}%`,
-    alignItems: 'center',
-    paddingVertical: 6,
-  },
-  dayNumberWrap: {
-    width: 32,
-    height: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 16,
-  },
-  dayTodayCircle: {
-    backgroundColor: J.accent,
-  },
-  daySelectedRing: {
-    borderWidth: 1,
-    borderColor: J.muted + '80',
-  },
-  dayNumber: {
-    fontSize: 14,
-    color: J.text,
-    fontFamily: 'DMSans_400Regular',
-  },
-  dayNumberOutMonth: {
-    color: J.muted,
-    opacity: 0.4,
-  },
-  dayNumberFuture: {
-    opacity: 0.35,
-  },
-  dayDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 3,
-    marginTop: 4,
-  },
-  dayDotPlaceholder: {
-    width: 5,
-    height: 5,
-    marginTop: 4,
   },
 });

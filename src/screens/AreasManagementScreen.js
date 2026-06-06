@@ -163,7 +163,10 @@ export default function AreasManagementScreen() {
       <ScrollView
         ref={scrollRef}
         style={styles.container}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[
+          styles.content,
+          areas.length === 0 && { flexGrow: 1 },
+        ]}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -173,6 +176,31 @@ export default function AreasManagementScreen() {
           />
         }>
 
+      {areas.length === 0 ? (
+        <View style={{
+          justifyContent: 'center',
+          alignItems: 'center',
+          flex: 1,
+        }}>
+          <Text style={{ fontSize: 40, color: '#a78bfa' }}>◉</Text>
+          <Text style={{
+            fontFamily: 'PlayfairDisplay_300Light',
+            fontSize: 22,
+            color: '#f5f3ff',
+            textAlign: 'center',
+            marginTop: 16,
+          }}>No life areas yet</Text>
+          <Text style={{
+            fontSize: 14,
+            color: '#6b5fa0',
+            textAlign: 'center',
+            lineHeight: 22,
+            marginTop: 8,
+            marginHorizontal: 32,
+          }}>Life areas are the foundation of everything in Meridian. Add one to get started.</Text>
+        </View>
+      ) : (
+        <>
       <Text style={styles.hint}>Toggle areas on or off. Only custom areas can be removed.</Text>
 
       {areas.map(area => (
@@ -196,6 +224,8 @@ export default function AreasManagementScreen() {
           </View>
         </View>
       ))}
+        </>
+      )}
 
       {suggestedAreas.length > 0 && (
         <View style={styles.suggestedSection}>

@@ -1,6 +1,7 @@
 import 'react-native-url-polyfill/auto';
 import { useEffect, useState } from 'react';
 import { View, ActivityIndicator } from 'react-native';
+import * as Notifications from 'expo-notifications';
 import {
   useFonts,
   DMSans_400Regular,
@@ -19,6 +20,19 @@ import AuthScreen from './src/screens/AuthScreen';
 import AppNavigator from './src/navigation/AppNavigator';
 import OnboardingNavigator from './src/navigation/OnboardingNavigator';
 
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
+
+const requestNotificationPermissions = async () => {
+  const { status } = await Notifications.requestPermissionsAsync();
+  return status === 'granted';
+};
+
 export default function App() {
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -32,6 +46,10 @@ export default function App() {
     PlayfairDisplay_300Light: PlayfairDisplay_400Regular,
     PlayfairDisplay_700Bold,
   });
+
+  useEffect(() => {
+    requestNotificationPermissions();
+  }, []);
 
   useEffect(() => {
     const timer = setTimeout(() => {

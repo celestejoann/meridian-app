@@ -133,7 +133,10 @@ export default function IdentityManagementScreen() {
   return (
     <ScrollView
       style={styles.container}
-      contentContainerStyle={styles.content}
+      contentContainerStyle={[
+        styles.content,
+        identities.length === 0 && !showAddForm && { flexGrow: 1 },
+      ]}
       refreshControl={
         <RefreshControl
           refreshing={refreshing}
@@ -195,9 +198,27 @@ export default function IdentityManagementScreen() {
       )}
 
       {identities.length === 0 && !showAddForm && (
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyText}>No identity statements yet.</Text>
-          <Text style={styles.emptySubtext}>Tap + Add identity to define who you are.</Text>
+        <View style={{
+          justifyContent: 'center',
+          alignItems: 'center',
+          flex: 1,
+        }}>
+          <Text style={{ fontSize: 40, color: '#a78bfa' }}>✦</Text>
+          <Text style={{
+            fontFamily: 'PlayfairDisplay_300Light',
+            fontSize: 22,
+            color: '#f5f3ff',
+            textAlign: 'center',
+            marginTop: 16,
+          }}>Who are you?</Text>
+          <Text style={{
+            fontSize: 14,
+            color: '#6b5fa0',
+            textAlign: 'center',
+            lineHeight: 22,
+            marginTop: 8,
+            marginHorizontal: 32,
+          }}>Add an identity statement to declare who you already are.</Text>
         </View>
       )}
 

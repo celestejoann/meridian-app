@@ -93,62 +93,6 @@ function isDueToday(habit, weekCountMap, todayKey) {
   }
 }
 
-function computeHabitsForTodayRate(habits, weekRows, todayKey) {
-  const weekCountMap = buildWeekCountMap(weekRows);
-  const dueToday = habits.filter((h) => isDueToday(h, weekCountMap, todayKey));
-  const weekHabits = [];
-  for (const h of habits) {
-    if (!isOnOrAfterCreated(h, todayKey)) continue;
-    const freq = (h.frequency || 'daily').toLowerCase();
-    if (isDueToday(h, weekCountMap, todayKey)) continue;
-    if (freq === 'xperweek' || freq === 'weekly') {
-      weekHabits.push(h);
-    }
-  }
-  return [...dueToday, ...weekHabits];
-}
-
-function buildMorningInsightPrompt({
-  streakVal,
-  todayCount,
-  totalToday,
-  topArea,
-  identityStatement,
-}) {
-  return `You are Meridian, a warm life companion. Write exactly 2 warm sentences for someone who has a ${streakVal}-day streak, showed up ${todayCount} of ${totalToday} times today, their top area is ${topArea}, and one of their identity statements is: ${identityStatement}. Be personal and specific to their day. Never end with a general statement about identity or who they are. Just be warm and encouraging about their actual day.`;
-}
-
-function buildFallbackMorningInsight({
-  streakVal,
-  todayCount,
-  totalToday,
-  topArea,
-  identityStatement,
-}) {
-  const areaLabel = topArea.replace(/^\w/, (c) => c.toUpperCase());
-  if (todayCount > 0) {
-    return `You are someone who shows up — ${todayCount} of ${totalToday} commitments today, and a ${streakVal}-day streak that reflects who you already are. Your ${areaLabel} life is part of how you live as someone who ${identityStatement}.`;
-  }
-  return `You are someone with a ${streakVal}-day practice of returning to what matters. Today in ${areaLabel} is another chance to live as someone who ${identityStatement}.`;
-}
-
-function parseAnthropicResponse(rawData) {
-  let data = rawData;
-  if (typeof rawData === 'string') {
-    try {
-      data = JSON.parse(rawData);
-    } catch {
-      return rawData.trim();
-    }
-  }
-  if (typeof data?.content?.[0]?.text === 'string') {
-    return data.content[0].text.trim();
-  }
-  if (typeof data?.result === 'string') return data.result.trim();
-  if (typeof data?.text === 'string') return data.text.trim();
-  return '';
-}
-
 function computeShowUpStreak(dateKeysWithActivity) {
   let d = new Date();
   if (!dateKeysWithActivity.has(formatLocalDateKey(d))) {
@@ -438,8 +382,6 @@ export default function DashboardScreen() {
   const [tasksDueToday, setTasksDueToday] = useState([]);
   const [tasksDueThisWeek, setTasksDueThisWeek] = useState([]);
   const [showGraceCard, setShowGraceCard] = useState(false);
-  const [morningInsight, setMorningInsight] = useState('');
-  const [insightLoading, setInsightLoading] = useState(true);
   const [showMilestone, setShowMilestone] = useState(false);
   const [milestoneText, setMilestoneText] = useState('');
   const [milestoneSubtext, setMilestoneSubtext] = useState('');
@@ -608,52 +550,6 @@ export default function DashboardScreen() {
     }
   };
 
-  const fetchMorningInsight = async ({
-    streakVal,
-    todayCount,
-    totalToday,
-    topArea,
-    identityStatement,
-  }) => {
-    const insightParams = {
-      streakVal,
-      todayCount,
-      totalToday,
-      topArea,
-      identityStatement,
-    };
-    const fallback = buildFallbackMorningInsight(insightParams);
-
-    try {
-      setInsightLoading(true);
-      const prompt = buildMorningInsightPrompt(insightParams);
-
-      const { data, error: invokeError } = await supabase.functions.invoke(
-        'anthropic',
-        {
-          body: {
-            model: 'claude-haiku-4-5-20251001',
-            max_tokens: 200,
-            messages: [{ role: 'user', content: prompt }],
-          },
-        }
-      );
-
-      if (invokeError) {
-        console.log('Insight fetch error:', invokeError);
-        setMorningInsight(fallback);
-      } else {
-        const text = data?.content?.[0]?.text ?? null;
-        setMorningInsight(text || fallback);
-      }
-    } catch (e) {
-      console.log('Insight fetch error:', e);
-      setMorningInsight(fallback);
-    } finally {
-      setInsightLoading(false);
-    }
-  };
-
   const recalcStreak = useCallback(async (uid) => {
     const since = addDays(new Date(), -400);
     const sinceKey = formatLocalDateKey(since);
@@ -692,13 +588,11 @@ export default function DashboardScreen() {
       setStreak(0);
       checkStreakMilestone(0);
       setBestStreak(0);
-      setInsightLoading(false);
       setLoading(false);
       return;
     }
     const uid = userData.user.id;
     setUserId(uid);
-    setInsightLoading(true);
 
     const todayStr = formatLocalDateKey(new Date());
     const mondayStr = getMondayKey(new Date());
@@ -749,22 +643,10 @@ export default function DashboardScreen() {
       setHabits(habitsData ?? []);
     }
 
-    const habitsList = habitsData ?? [];
     const todayMap = new Map();
     for (const row of todayRows ?? []) {
       todayMap.set(row.habit_id, row.completion_type || 'completed');
     }
-    const habitsForToday = computeHabitsForTodayRate(
-      habitsList,
-      weekRows ?? [],
-      todayStr
-    );
-    const todayCount = habitsForToday.filter((h) => todayMap.has(h.id)).length;
-    const totalToday = habitsForToday.length;
-    const identities = identitiesData ?? [];
-    const topArea = identities[0]?.area_slug || 'life';
-    const identityStatement =
-      identities[0]?.statement || 'they are building a meaningful life';
 
     setTodayByHabit(todayMap);
     setWeekCompletions(weekRows ?? []);
@@ -783,15 +665,8 @@ export default function DashboardScreen() {
     setTasksDueToday(allTasks.filter(t => t.due_date <= todayStr));
     setTasksDueThisWeek(allTasks.filter(t => t.due_date > todayStr));
 
-    const { streak: streakVal } = await recalcStreak(uid);
+    await recalcStreak(uid);
     setLoading(false);
-    fetchMorningInsight({
-      streakVal,
-      todayCount,
-      totalToday,
-      topArea,
-      identityStatement,
-    });
   }, [recalcStreak]);
 
   useFocusEffect(
@@ -1084,19 +959,6 @@ export default function DashboardScreen() {
           </View>
         ) : (
           <>
-            <View style={styles.morningInsightCard}>
-              <Text style={styles.morningInsightLabel}>
-                YOUR MORNING INSIGHT
-              </Text>
-              {insightLoading ? (
-                <Text style={styles.morningInsightLoadingText}>
-                  Reflecting on your morning...
-                </Text>
-              ) : (
-                <Text style={styles.morningInsightText}>{morningInsight}</Text>
-              )}
-            </View>
-
             <View
               style={[
                 styles.streakHeroCard,
@@ -1417,36 +1279,6 @@ const styles = StyleSheet.create({
   loaderWrap: {
     paddingVertical: 48,
     alignItems: 'center',
-  },
-  morningInsightCard: {
-    backgroundColor: COLORS.surfaceLight,
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 16,
-    borderLeftWidth: 3,
-    borderLeftColor: COLORS.accent,
-    zIndex: 2,
-    elevation: 2,
-  },
-  morningInsightLabel: {
-    fontSize: 10,
-    letterSpacing: 2,
-    color: COLORS.accent,
-    marginBottom: 8,
-    fontFamily: FONTS.bodyMedium,
-  },
-  morningInsightText: {
-    fontSize: 15,
-    color: COLORS.text,
-    fontStyle: 'italic',
-    fontFamily: FONTS.body,
-    lineHeight: 24,
-  },
-  morningInsightLoadingText: {
-    fontSize: 14,
-    color: COLORS.muted,
-    fontStyle: 'italic',
-    fontFamily: FONTS.body,
   },
   card: {
     backgroundColor: COLORS.surface,

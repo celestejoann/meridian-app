@@ -47,6 +47,17 @@ const TIMEFRAME_OPTIONS = [
   { label: '1 year', days: 365 },
 ];
 
+const WEEK_INSIGHT_PROMPT = `You are the Reflective Mirror — a warm, grounding presence that helps people see themselves clearly. You speak in second person, present tense. You never use spiritual or religious language. You are not a coach or therapist — you are a mirror.
+
+Based on this user's data from the last 7 days, provide two things:
+
+1. PATTERN (1-2 sentences): One specific, data-driven observation about their behavior or consistency. Reference actual numbers or areas. Start with 'You tend to...' or 'Your [area] shows...' or similar.
+
+2. IDENTITY (1-2 sentences): A present-tense identity affirmation grounded in their actual data and identity statements. Start with 'You are someone who...'
+
+Keep the total response under 80 words.
+Do not use bullet points or headers in the response — just two short paragraphs.`;
+
 function formatLocalDateKey(d) {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -546,6 +557,85 @@ export default function InsightsScreen() {
   const [journalEntries, setJournalEntries] = useState([]);
   const [selectedArea, setSelectedArea] = useState(null);
   const [selectedDays, setSelectedDays] = useState(30);
+  const [weekInsight, setWeekInsight] = useState(null);
+  const [insightLoading, setInsightLoading] = useState(false);
+  const [insightFailed, setInsightFailed] = useState(false);
+  const insightFetchedRef = useRef(false);
+
+  const fetchWeekInsight = useCallback(async () => {
+    setInsightLoading(true);
+    setInsightFailed(false);
+    try {
+      const sevenDayKeys = new Set(getLastNDayKeys(todayKey, 7));
+      const thirtyDayKeys = new Set(getLastNDayKeys(todayKey, 30));
+      const habitsById = new Map(habits.map((h) => [h.id, h]));
+
+      const recentCompletions = completions
+        .filter((c) => sevenDayKeys.has(String(c.completed_date).slice(0, 10)))
+        .map((c) => ({
+          date: String(c.completed_date).slice(0, 10),
+          habit_id: c.habit_id,
+          area: habitsById.get(c.habit_id)?.area ?? null,
+        }));
+
+      const recentEntries = journalEntries
+        .filter((e) => sevenDayKeys.has(String(e.entry_date).slice(0, 10)))
+        .map((e) => ({
+          date: e.entry_date,
+          morning_note: e.morning_note ?? null,
+          evening_note: e.evening_note ?? null,
+          win_of_day: e.win_of_day ?? null,
+          reflection_answer: e.reflection_answer ?? null,
+        }));
+
+      const areaCompletionCounts = {};
+      for (const c of completions) {
+        const dateKey = String(c.completed_date).slice(0, 10);
+        if (!thirtyDayKeys.has(dateKey)) continue;
+        const habit = habitsById.get(c.habit_id);
+        const area = (habit?.area || 'general').toLowerCase();
+        areaCompletionCounts[area] = (areaCompletionCounts[area] || 0) + 1;
+      }
+
+      const identities = userIdentities.map((i) => ({
+        area: i.area_slug ?? i.area,
+        statement: i.statement,
+      }));
+
+      const userData = JSON.stringify(
+        {
+          habit_completions_last_7_days: recentCompletions,
+          daily_entries_last_7_days: recentEntries,
+          user_identities: identities,
+          area_completion_counts_last_30_days: areaCompletionCounts,
+        },
+        null,
+        2
+      );
+
+      const prompt = `${WEEK_INSIGHT_PROMPT}\n\nUser data:\n${userData}`;
+
+      const { data, error } = await supabase.functions.invoke('anthropic', {
+        body: {
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 200,
+          messages: [{ role: 'user', content: prompt }],
+        },
+      });
+
+      if (error) throw error;
+
+      const text = data?.content?.[0]?.text?.trim();
+      if (!text) throw new Error('No insight returned');
+
+      setWeekInsight(text);
+    } catch {
+      setWeekInsight(null);
+      setInsightFailed(true);
+    } finally {
+      setInsightLoading(false);
+    }
+  }, [completions, journalEntries, userIdentities, habits, todayKey]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -882,6 +972,12 @@ export default function InsightsScreen() {
       scrollRef.current?.scrollToEnd({ animated: false });
     }
   }, [loading, heatmapWeeks, squareSize, selectedDays, identityRows]);
+
+  useEffect(() => {
+    if (loading || insightFetchedRef.current) return;
+    insightFetchedRef.current = true;
+    fetchWeekInsight();
+  }, [loading, fetchWeekInsight]);
 
   const dayOfWeekStats = useMemo(() => {
     const buckets = DOW_LABELS.map((label) => ({ label, scores: [] }));
@@ -1420,6 +1516,29 @@ export default function InsightsScreen() {
             </TouchableOpacity>
           </>
         )}
+
+        {!insightFailed && (insightLoading || weekInsight) ? (
+          <View style={styles.insightCard}>
+            <Text style={styles.insightCardTitle}>YOUR INSIGHT</Text>
+            {insightLoading ? (
+              <Text style={styles.insightLoadingText}>
+                Reflecting on your week...
+              </Text>
+            ) : (
+              <>
+                <Text style={styles.insightText}>{weekInsight}</Text>
+                <TouchableOpacity
+                  onPress={fetchWeekInsight}
+                  activeOpacity={0.7}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Text style={styles.insightRefreshText}>
+                    refresh insight ↺
+                  </Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        ) : null}
       </ScrollView>
     </SafeAreaView>
   );
@@ -1447,6 +1566,42 @@ const styles = StyleSheet.create({
   loaderWrap: {
     paddingVertical: 48,
     alignItems: 'center',
+  },
+  insightCard: {
+    backgroundColor: '#1a1625',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+    borderLeftWidth: 3,
+    borderLeftColor: '#a78bfa',
+  },
+  insightCardTitle: {
+    fontSize: 9,
+    fontFamily: FONTS.bodyMedium,
+    textTransform: 'uppercase',
+    color: '#a78bfa',
+    letterSpacing: 2,
+    marginBottom: 12,
+  },
+  insightLoadingText: {
+    fontSize: 15,
+    fontFamily: FONTS.body,
+    color: COLORS.mutedLight,
+    fontStyle: 'italic',
+    lineHeight: 24,
+  },
+  insightText: {
+    fontSize: 15,
+    color: '#ffffffdd',
+    fontStyle: 'italic',
+    lineHeight: 24,
+    fontFamily: FONTS.body,
+  },
+  insightRefreshText: {
+    color: '#ffffff40',
+    fontSize: 12,
+    fontFamily: FONTS.bodyMedium,
+    marginTop: 12,
   },
   timeframeRow: {
     flexDirection: 'row',

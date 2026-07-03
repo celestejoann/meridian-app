@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   LayoutAnimation,
+  Modal,
   Platform,
   RefreshControl,
   ScrollView,
@@ -15,6 +16,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
 
 const J = {
@@ -57,19 +59,36 @@ function isFutureDate(dateKey, todayKey) {
   return dateKey > todayKey;
 }
 
-function buildFallbackJournalSummary(entry) {
-  const parts = [];
-  if (entry.one_thing) parts.push(`you set an intention around ${entry.one_thing}`);
-  if (entry.win_of_day) parts.push(`you noticed a win in ${entry.win_of_day}`);
-  if (entry.journal_note) parts.push(`your morning reflection shows ${entry.journal_note}`);
-  if (entry.evening_note) parts.push(`your evening reflection shows ${entry.evening_note}`);
-  if (entry.other_notes) parts.push(`you left space for ${entry.other_notes}`);
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
 
-  if (parts.length === 0) {
-    return 'You are someone who returns to reflection — and that practice is already part of who you are.';
+const DAY_HEADERS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+
+function getCalendarGridDays(year, month) {
+  const firstOfMonth = new Date(year, month, 1);
+  const start = new Date(firstOfMonth);
+  const dow = start.getDay();
+  const diff = dow === 0 ? -6 : 1 - dow;
+  start.setDate(start.getDate() + diff);
+
+  const days = [];
+  const cursor = new Date(start);
+  for (let i = 0; i < 42; i++) {
+    days.push({
+      date: new Date(cursor),
+      key: formatLocalDateKey(cursor),
+      inMonth: cursor.getMonth() === month,
+    });
+    cursor.setDate(cursor.getDate() + 1);
   }
+  return days;
+}
 
-  return `You are someone who shows up in your own words today: ${parts.join(', ')}. That is who you are, not who you are trying to become.`;
+function getMonthRangeKeys(year, month) {
+  const grid = getCalendarGridDays(year, month);
+  return { start: grid[0].key, end: grid[grid.length - 1].key };
 }
 
 function isWithinEditableWindow(dateKey, todayKey) {
@@ -122,15 +141,14 @@ export default function JournalScreen() {
   const [reflectionAnswer, setReflectionAnswer] = useState('');
   const [morningNote, setMorningNote] = useState('');
   const [oneWin, setOneWin] = useState('');
-  const [sleepHours, setSleepHours] = useState('');
   const [eveningNote, setEveningNote] = useState('');
-  const [aiSummary, setAiSummary] = useState(null);
-  const [aiLoading, setAiLoading] = useState(false);
-  const [journalSummary, setJournalSummary] = useState('');
-  const [summaryLoading, setSummaryLoading] = useState(false);
-  const [journalReflectActive, setJournalReflectActive] = useState(false);
   const [otherNotes, setOtherNotes] = useState('');
   const [otherNotesExpanded, setOtherNotesExpanded] = useState(false);
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const [modalYear, setModalYear] = useState(() => new Date().getFullYear());
+  const [modalMonth, setModalMonth] = useState(() => new Date().getMonth());
+  const [monthEntryDates, setMonthEntryDates] = useState(new Set());
+  const [calendarLoading, setCalendarLoading] = useState(false);
 
   const otherNotesDebounceRef = useRef(null);
 
@@ -189,20 +207,30 @@ export default function JournalScreen() {
 
     const notes = data?.other_notes ?? '';
     setOneThing(data?.one_thing ?? '');
-    setReflectionAnswer(data?.journal_note ?? '');
+    setReflectionAnswer(data?.reflection_answer ?? '');
     setMorningNote('');
     setOneWin(data?.win_of_day ?? '');
-    setSleepHours(
-      data?.sleep_hours != null && data?.sleep_hours !== ''
-        ? String(data.sleep_hours)
-        : ''
-    );
     setEveningNote(data?.evening_note ?? '');
-    setAiSummary(data?.ai_daily_summary ?? null);
     setOtherNotes(notes);
     setOtherNotesExpanded(false);
     setEntryLoading(false);
   }, [userId, selectedDateKey]);
+
+  const loadMonthEntryDates = useCallback(async () => {
+    if (!userId) return;
+    setCalendarLoading(true);
+    const { start, end } = getMonthRangeKeys(modalYear, modalMonth);
+    const { data } = await supabase
+      .from('daily_entries')
+      .select('entry_date')
+      .eq('user_id', userId)
+      .gte('entry_date', start)
+      .lte('entry_date', end);
+    setMonthEntryDates(
+      new Set((data || []).map((row) => String(row.entry_date).slice(0, 10)))
+    );
+    setCalendarLoading(false);
+  }, [userId, modalYear, modalMonth]);
 
   const saveOtherNotes = useCallback(
     async (text) => {
@@ -256,10 +284,10 @@ export default function JournalScreen() {
   }, [userId, selectedDateKey, loadEntry]);
 
   useEffect(() => {
-    setJournalReflectActive(false);
-    setJournalSummary('');
-    setSummaryLoading(false);
-  }, [selectedDateKey]);
+    if (calendarOpen) {
+      loadMonthEntryDates();
+    }
+  }, [calendarOpen, modalYear, modalMonth, loadMonthEntryDates]);
 
   useEffect(() => {
     if (!savedFlash) return undefined;
@@ -287,67 +315,58 @@ export default function JournalScreen() {
     }
   };
 
+  const openCalendar = () => {
+    const d = parseDateKey(selectedDateKey);
+    setModalYear(d.getFullYear());
+    setModalMonth(d.getMonth());
+    setCalendarOpen(true);
+  };
+
+  const goPrevMonth = () => {
+    if (modalMonth === 0) {
+      setModalMonth(11);
+      setModalYear((y) => y - 1);
+    } else {
+      setModalMonth((m) => m - 1);
+    }
+  };
+
+  const goNextMonth = () => {
+    if (modalMonth === 11) {
+      setModalMonth(0);
+      setModalYear((y) => y + 1);
+    } else {
+      setModalMonth((m) => m + 1);
+    }
+  };
+
+  const selectCalendarDate = (key) => {
+    if (isFutureDate(key, todayKey)) return;
+    setSelectedDateKey(key);
+    setCalendarOpen(false);
+  };
+
+  const calendarDays = useMemo(
+    () => getCalendarGridDays(modalYear, modalMonth),
+    [modalYear, modalMonth]
+  );
+
   const toggleOtherThoughts = () => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setOtherNotesExpanded((v) => !v);
   };
 
-  const generateJournalSummary = async (entry) => {
-    const parts = [];
-    if (entry.one_thing) parts.push(`Intention: ${entry.one_thing}`);
-    if (entry.win_of_day) parts.push(`Win: ${entry.win_of_day}`);
-    if (entry.journal_note) parts.push(`Morning reflection: ${entry.journal_note}`);
-    if (entry.evening_note) parts.push(`Evening reflection: ${entry.evening_note}`);
-    if (entry.other_notes) parts.push(`Other thoughts: ${entry.other_notes}`);
-    if (parts.length === 0) return;
-
-    const fallback = buildFallbackJournalSummary(entry);
-
-    try {
-      setSummaryLoading(true);
-      const prompt = `You are Meridian, a warm life companion. Read this journal entry and write exactly 2 warm, specific sentences directly to this person. Be personal and grounded in what they actually wrote. Never end with a general statement about identity or who they are. Never summarize their character. Just reflect their day back to them warmly and specifically.
-
-Journal entry: ${parts.join('. ')}`;
-
-      const { data, error: invokeError } = await supabase.functions.invoke(
-        'anthropic',
-        {
-          body: {
-            model: 'claude-haiku-4-5-20251001',
-            max_tokens: 300,
-            messages: [{ role: 'user', content: prompt }],
-          },
-        }
-      );
-
-      if (invokeError) {
-        console.log('Journal summary error:', invokeError);
-        setJournalSummary(fallback);
-      } else {
-        const summaryText = data?.content?.[0]?.text ?? null;
-        setJournalSummary(summaryText || fallback);
-      }
-    } catch (e) {
-      console.log('Journal summary error:', e);
-      setJournalSummary(fallback);
-    } finally {
-      setSummaryLoading(false);
-    }
-  };
-
   const handleSave = async () => {
     if (!userId || !isEditable) return;
     setSaving(true);
-    const sleepVal =
-      sleepHours.trim() === '' ? null : parseFloat(sleepHours);
 
+    try {
     const payload = {
       user_id: userId,
       entry_date: selectedDateKey,
       one_thing: oneThing.trim() || null,
-      journal_note: reflectionAnswer.trim() || null,
+      reflection_answer: reflectionAnswer,
       win_of_day: oneWin.trim() || null,
-      sleep_hours: sleepVal,
       evening_note: eveningNote.trim() || null,
     };
 
@@ -368,9 +387,8 @@ Journal entry: ${parts.join('. ')}`;
             user_id: userId,
             entry_date: selectedDateKey,
             one_thing: payload.one_thing,
-            journal_note: payload.journal_note,
+            reflection_answer: payload.reflection_answer,
             win_of_day: payload.win_of_day,
-            sleep_hours: payload.sleep_hours,
             evening_note: payload.evening_note,
           },
           { onConflict: 'user_id,entry_date' }
@@ -378,19 +396,7 @@ Journal entry: ${parts.join('. ')}`;
       setSaving(false);
       if (!retryError) {
         setSavedFlash(true);
-        setJournalReflectActive(true);
-        setSummaryLoading(true);
-        generateJournalSummary({
-          one_thing: payload.one_thing,
-          win_of_day: payload.win_of_day,
-          journal_note: payload.journal_note,
-          evening_note: payload.evening_note,
-          other_notes: payload.other_notes,
-        });
         await loadEntry();
-        if (eveningNote.trim()) {
-          generateDailySummary();
-        }
       }
       return;
     }
@@ -398,84 +404,11 @@ Journal entry: ${parts.join('. ')}`;
     setSaving(false);
     if (!error) {
       setSavedFlash(true);
-      setJournalReflectActive(true);
-      setSummaryLoading(true);
-      generateJournalSummary({
-        one_thing: payload.one_thing,
-        win_of_day: payload.win_of_day,
-        journal_note: payload.journal_note,
-        evening_note: payload.evening_note,
-        other_notes: payload.other_notes,
-      });
       await loadEntry();
-      if (eveningNote.trim()) {
-        generateDailySummary();
-      }
     }
-  };
-
-  const generateDailySummary = async () => {
-    if (!userId || !selectedDateKey) return;
-    setAiLoading(true);
-    try {
-      const { data: completions } = await supabase
-        .from('habit_completions')
-        .select('completion_type, habits(name)')
-        .eq('user_id', userId)
-        .eq('completed_date', selectedDateKey);
-
-      const completed = (completions || [])
-        .filter(c => c.completion_type === 'completed')
-        .map(c => c.habits?.name)
-        .filter(Boolean);
-
-      const lifeHappens = (completions || [])
-        .filter(c => c.completion_type === 'life_happens')
-        .map(c => c.habits?.name)
-        .filter(Boolean);
-
-      const userMessage = `Here is what the user recorded today:
-- One thing that mattered: ${oneThing || 'not recorded'}
-- Win of the day: ${oneWin || 'not recorded'}
-- Morning reflection: ${morningNote || 'not recorded'}
-- Evening reflection: ${eveningNote || 'not recorded'}
-- Commitments they showed up for: ${completed.length > 0 ? completed.join(', ') : 'none recorded'}
-- Grace days (life happens): ${lifeHappens.length > 0 ? lifeHappens.join(', ') : 'none'}
-- Sleep hours: ${sleepHours || 'not recorded'}
-
-Write a 2-3 sentence Reflective Mirror summary of what today's data shows about who they are. Stick only to what they recorded. Do not give advice or suggestions.`;
-
-      const { data, error: invokeError } = await supabase.functions.invoke(
-        'anthropic',
-        {
-          body: {
-            model: 'claude-haiku-4-5-20251001',
-            max_tokens: 300,
-            system:
-              'You are the Reflective Mirror — the voice of Meridian, an identity-first life app. Your only job is to reflect back what the user has already given you. You do not give advice, suggestions, or interpretations about health, relationships, finances, or any other area of life. You only summarize what they recorded, framed as identity evidence in present tense. Rules: Stick strictly to data the user provided. Never infer, advise, or extrapolate beyond what they wrote. Use present tense identity framing ("You are someone who..."). 2-3 sentences only. Warm but neutral. Never prescriptive. Never mention anything that could be construed as medical, mental health, financial, or relationship advice.',
-            messages: [{ role: 'user', content: userMessage }],
-          },
-        }
-      );
-
-      if (invokeError) {
-        console.log('AI summary error:', invokeError);
-      } else {
-        const summaryText = data?.content?.[0]?.text ?? null;
-
-        if (summaryText) {
-          await supabase
-            .from('daily_entries')
-            .update({ ai_daily_summary: summaryText })
-            .eq('user_id', userId)
-            .eq('entry_date', selectedDateKey);
-          setAiSummary(summaryText);
-        }
-      }
-    } catch (e) {
-      console.log('AI summary error:', e);
-    } finally {
-      setAiLoading(false);
+    } catch (error) {
+      console.log('save error:', error);
+      setSaving(false);
     }
   };
 
@@ -498,22 +431,31 @@ Write a 2-3 sentence Reflective Mirror summary of what today's data shows about 
             colors={['#a78bfa']}
           />
         }>
-        <View style={styles.dateNav}>
+        <View style={styles.dateNavWrap}>
+          <View style={styles.dateNav}>
+            <TouchableOpacity
+              onPress={goPrevDay}
+              style={styles.dateNavBtn}
+              activeOpacity={0.7}
+              accessibilityLabel="Previous day">
+              <Text style={styles.dateNavArrow}>←</Text>
+            </TouchableOpacity>
+            <Text style={styles.dateNavLabel}>{dateNavLabel}</Text>
+            <TouchableOpacity
+              onPress={goNextDay}
+              style={styles.dateNavBtn}
+              activeOpacity={0.7}
+              disabled={isToday}
+              accessibilityLabel="Next day">
+              <Text style={[styles.dateNavArrow, isToday && styles.dateNavArrowDisabled]}>→</Text>
+            </TouchableOpacity>
+          </View>
           <TouchableOpacity
-            onPress={goPrevDay}
-            style={styles.dateNavBtn}
+            onPress={openCalendar}
+            style={styles.calendarBtn}
             activeOpacity={0.7}
-            accessibilityLabel="Previous day">
-            <Text style={styles.dateNavArrow}>←</Text>
-          </TouchableOpacity>
-          <Text style={styles.dateNavLabel}>{dateNavLabel}</Text>
-          <TouchableOpacity
-            onPress={goNextDay}
-            style={styles.dateNavBtn}
-            activeOpacity={0.7}
-            disabled={isToday}
-            accessibilityLabel="Next day">
-            <Text style={[styles.dateNavArrow, isToday && styles.dateNavArrowDisabled]}>→</Text>
+            accessibilityLabel="Open calendar">
+            <Ionicons name="calendar-outline" size={22} color={J.accent} />
           </TouchableOpacity>
         </View>
 
@@ -538,10 +480,10 @@ Write a 2-3 sentence Reflective Mirror summary of what today's data shows about 
               </Text>
             </View>
 
-            <Text style={styles.fieldLabel}>Your reflection</Text>
+            <Text style={styles.accentFieldLabel}>YOUR REFLECTION</Text>
             <TextInput
               style={[styles.textInput, styles.textInputMultiline, dimmed && styles.dimmed]}
-              placeholder="Write your thoughts here..."
+              placeholder="Write your reflection here..."
               placeholderTextColor={J.placeholder}
               value={reflectionAnswer}
               onChangeText={setReflectionAnswer}
@@ -561,18 +503,6 @@ Write a 2-3 sentence Reflective Mirror summary of what today's data shows about 
               value={oneThing}
               onChangeText={setOneThing}
               editable={inputEditable}
-            />
-
-            <Text style={[styles.fieldLabel, styles.fieldLabelSpaced]}>Hours of sleep</Text>
-            <TextInput
-              style={[styles.textInput, dimmed && styles.dimmed]}
-              placeholder="7.5"
-              placeholderTextColor={J.placeholder}
-              value={sleepHours}
-              onChangeText={setSleepHours}
-              keyboardType="decimal-pad"
-              editable={inputEditable}
-              maxLength={4}
             />
 
             <Text style={[styles.fieldLabel, styles.fieldLabelSpaced]}>Morning reflection</Text>
@@ -657,25 +587,97 @@ Write a 2-3 sentence Reflective Mirror summary of what today's data shows about 
                 ) : null}
               </View>
             ) : null}
-
-            {journalReflectActive ? (
-              <View style={styles.journalReflectCard}>
-                <Text style={styles.journalReflectLabel}>
-                  MERIDIAN REFLECTS
-                </Text>
-                {summaryLoading ? (
-                  <Text style={styles.journalReflectLoadingText}>
-                    Reflecting on your day...
-                  </Text>
-                ) : (
-                  <Text style={styles.journalReflectText}>{journalSummary}</Text>
-                )}
-              </View>
-            ) : null}
           </>
         )}
       </ScrollView>
       </KeyboardAvoidingView>
+
+      <Modal
+        visible={calendarOpen}
+        animationType="slide"
+        onRequestClose={() => setCalendarOpen(false)}>
+        <SafeAreaView style={styles.modalSafe} edges={['top', 'bottom']}>
+          <View style={styles.modalTopRow}>
+            <View style={styles.modalTopSpacer} />
+            <TouchableOpacity
+              onPress={() => setCalendarOpen(false)}
+              style={styles.modalCancelBtn}
+              activeOpacity={0.7}>
+              <Text style={styles.modalCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.modalMonthNav}>
+            <TouchableOpacity
+              onPress={goPrevMonth}
+              style={styles.modalNavBtn}
+              activeOpacity={0.7}>
+              <Text style={styles.modalNavArrow}>←</Text>
+            </TouchableOpacity>
+            <Text style={styles.modalMonthTitle}>
+              {MONTH_NAMES[modalMonth]} {modalYear}
+            </Text>
+            <TouchableOpacity
+              onPress={goNextMonth}
+              style={styles.modalNavBtn}
+              activeOpacity={0.7}>
+              <Text style={styles.modalNavArrow}>→</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.modalWeekHeader}>
+            {DAY_HEADERS.map((label, index) => (
+              <Text key={`${label}-${index}`} style={styles.modalWeekDay}>
+                {label}
+              </Text>
+            ))}
+          </View>
+
+          {calendarLoading ? (
+            <ActivityIndicator color={J.accent} style={styles.modalLoader} />
+          ) : (
+            <View style={styles.modalGrid}>
+              {calendarDays.map((day) => {
+                const isToday = day.key === todayKey;
+                const isSelected = day.key === selectedDateKey;
+                const isFutureDay = isFutureDate(day.key, todayKey);
+                const hasEntry = monthEntryDates.has(day.key);
+                const showHighlight = isToday || isSelected;
+
+                return (
+                  <TouchableOpacity
+                    key={day.key}
+                    style={styles.modalDayCell}
+                    onPress={() => selectCalendarDate(day.key)}
+                    activeOpacity={0.7}
+                    disabled={isFutureDay}>
+                    <View
+                      style={[
+                        styles.modalDayCircle,
+                        showHighlight && styles.modalDayCircleActive,
+                      ]}>
+                      <Text
+                        style={[
+                          styles.modalDayNumber,
+                          !day.inMonth && styles.modalDayNumberOutMonth,
+                          isFutureDay && styles.modalDayNumberFuture,
+                          showHighlight && styles.modalDayNumberActive,
+                        ]}>
+                        {day.date.getDate()}
+                      </Text>
+                    </View>
+                    {hasEntry && !isFutureDay ? (
+                      <View style={styles.modalEntryDot} />
+                    ) : (
+                      <View style={styles.modalEntryDotSpacer} />
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          )}
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -685,12 +687,21 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: J.bg,
   },
+  dateNavWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   dateNav: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingTop: 12,
     paddingBottom: 8,
+  },
+  calendarBtn: {
+    padding: 8,
+    marginLeft: 4,
   },
   dateNavBtn: {
     paddingHorizontal: 8,
@@ -756,6 +767,14 @@ const styles = StyleSheet.create({
     fontFamily: 'DMSans_500Medium',
     marginBottom: 6,
   },
+  accentFieldLabel: {
+    fontSize: 9,
+    letterSpacing: 2,
+    color: J.accent,
+    textTransform: 'uppercase',
+    fontFamily: 'DMSans_500Medium',
+    marginBottom: 6,
+  },
   fieldLabelSpaced: {
     marginTop: 16,
   },
@@ -809,38 +828,6 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     paddingHorizontal: 24,
   },
-  journalReflectCard: {
-    backgroundColor: '#231f35',
-    borderRadius: 16,
-    padding: 20,
-    marginHorizontal: 16,
-    marginTop: 16,
-    marginBottom: 8,
-    borderLeftWidth: 3,
-    borderLeftColor: J.accent,
-    zIndex: 2,
-    elevation: 2,
-  },
-  journalReflectLabel: {
-    fontSize: 10,
-    letterSpacing: 2,
-    color: J.accent,
-    marginBottom: 8,
-    fontFamily: 'DMSans_500Medium',
-  },
-  journalReflectText: {
-    fontSize: 15,
-    color: J.text,
-    fontStyle: 'italic',
-    fontFamily: 'DMSans_400Regular',
-    lineHeight: 24,
-  },
-  journalReflectLoadingText: {
-    fontSize: 14,
-    color: J.muted,
-    fontStyle: 'italic',
-    fontFamily: 'DMSans_400Regular',
-  },
   saveWrap: {
     marginTop: 24,
     marginBottom: 8,
@@ -868,5 +855,113 @@ const styles = StyleSheet.create({
     color: J.accent,
     textAlign: 'center',
     marginTop: 8,
+  },
+  modalSafe: {
+    flex: 1,
+    backgroundColor: J.bg,
+    paddingHorizontal: 24,
+  },
+  modalTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    paddingTop: 8,
+    paddingBottom: 4,
+  },
+  modalTopSpacer: {
+    flex: 1,
+  },
+  modalCancelBtn: {
+    padding: 8,
+  },
+  modalCancelText: {
+    fontSize: 15,
+    color: J.accent,
+    fontFamily: 'DMSans_400Regular',
+  },
+  modalMonthNav: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 24,
+    paddingHorizontal: 8,
+  },
+  modalMonthTitle: {
+    flex: 1,
+    textAlign: 'center',
+    fontSize: 18,
+    color: J.text,
+    fontFamily: 'PlayfairDisplay_300Light',
+  },
+  modalNavBtn: {
+    padding: 8,
+    minWidth: 40,
+    alignItems: 'center',
+  },
+  modalNavArrow: {
+    color: J.accent,
+    fontSize: 22,
+    fontFamily: 'DMSans_400Regular',
+  },
+  modalWeekHeader: {
+    flexDirection: 'row',
+    marginBottom: 12,
+  },
+  modalWeekDay: {
+    flex: 1,
+    textAlign: 'center',
+    fontSize: 10,
+    color: '#ffffff45',
+    textTransform: 'uppercase',
+    fontFamily: 'DMSans_400Regular',
+    letterSpacing: 1,
+  },
+  modalLoader: {
+    marginTop: 32,
+  },
+  modalGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  modalDayCell: {
+    width: `${100 / 7}%`,
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  modalDayCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalDayCircleActive: {
+    backgroundColor: J.accent,
+  },
+  modalDayNumber: {
+    fontSize: 15,
+    color: J.text,
+    fontFamily: 'DMSans_400Regular',
+  },
+  modalDayNumberOutMonth: {
+    color: '#ffffff45',
+  },
+  modalDayNumberFuture: {
+    color: '#ffffff25',
+  },
+  modalDayNumberActive: {
+    color: '#0f0d1a',
+  },
+  modalEntryDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: J.accent,
+    marginTop: 4,
+  },
+  modalEntryDotSpacer: {
+    width: 4,
+    height: 4,
+    marginTop: 4,
   },
 });

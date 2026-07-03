@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -13,7 +12,9 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { useFocusEffect } from '@react-navigation/native';
+import * as WebBrowser from 'expo-web-browser';
+import * as Linking from 'expo-linking';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
 import { scheduleDailyNotifications, cancelAllNotifications } from '../lib/notifications';
@@ -50,7 +51,6 @@ function SettingsCard({ children }) {
 }
 
 export default function SettingsScreen() {
-  const navigation = useNavigation();
   const [loading, setLoading] = useState(true);
   const [email, setEmail] = useState('');
   const [memberSince, setMemberSince] = useState('');
@@ -108,10 +108,6 @@ export default function SettingsScreen() {
     }, [loadUser])
   );
 
-  const openFeedback = () => {
-    Linking.openURL('mailto:hello@meridianlife.app');
-  };
-
   return (
     <SafeAreaView style={styles.safe} edges={['left', 'right']}>
       <ScrollView
@@ -150,22 +146,83 @@ export default function SettingsScreen() {
 
             <SectionLabel>YOUR ACCOUNT</SectionLabel>
             <SettingsCard>
-              <SettingsRow label="Your profile" />
-              <SettingsRow label="Notifications" />
-              <SettingsRow label="Privacy & Security" isLast />
+              <SettingsRow
+                label="Your profile"
+                onPress={() =>
+                  Alert.alert('Coming Soon', 'Profile editing will be available soon.')
+                }
+              />
+              <SettingsRow
+                label="Notifications"
+                onPress={() =>
+                  Alert.alert('Coming Soon', 'Notification settings are below.')
+                }
+              />
+              <SettingsRow
+                label="Privacy & Security"
+                isLast
+                onPress={() =>
+                  Alert.alert('Privacy & Security', 'Choose an option', [
+                    {
+                      text: 'Change Password',
+                      onPress: () =>
+                        Linking.openURL(
+                          'mailto:hello@meridianlife.app?subject=Change Password Request'
+                        ),
+                    },
+                    {
+                      text: 'Delete Account',
+                      style: 'destructive',
+                      onPress: () =>
+                        Alert.alert(
+                          'Delete Account',
+                          'To delete your account please email hello@meridianlife.app'
+                        ),
+                    },
+                    { text: 'Cancel', style: 'cancel' },
+                  ])
+                }
+              />
             </SettingsCard>
 
             <SectionLabel>LEGAL</SectionLabel>
             <SettingsCard>
-              <SettingsRow label="Privacy Policy" onPress={() => navigation.navigate('Privacy')} />
-              <SettingsRow label="Terms of Service" onPress={() => navigation.navigate('Terms')} />
-              <SettingsRow label="Disclaimer" isLast onPress={() => navigation.navigate('Disclaimer')} />
+              <SettingsRow
+                label="Privacy Policy"
+                onPress={() =>
+                  WebBrowser.openBrowserAsync('https://meridianlife.app/privacy.html')
+                }
+              />
+              <SettingsRow
+                label="Terms of Service"
+                onPress={() =>
+                  WebBrowser.openBrowserAsync('https://meridianlife.app/terms.html')
+                }
+              />
+              <SettingsRow
+                label="Disclaimer"
+                isLast
+                onPress={() =>
+                  WebBrowser.openBrowserAsync('https://meridianlife.app/disclaimer.html')
+                }
+              />
             </SettingsCard>
 
             <SectionLabel>SUPPORT</SectionLabel>
             <SettingsCard>
-              <SettingsRow label="Send Feedback" onPress={openFeedback} />
-              <SettingsRow label="Rate the App" isLast />
+              <SettingsRow
+                label="Send Feedback"
+                onPress={() =>
+                  Linking.openURL(
+                    'mailto:hello@meridianlife.app?subject=Meridian Feedback'
+                  )
+                }
+              />
+              <SettingsRow
+                label="Rate the App"
+                isLast
+                onPress={() => Linking.openURL('https://meridianlife.app')}
+              />
             </SettingsCard>
 
             <View style={{

@@ -1,7 +1,8 @@
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, FONTS } from '../../constants/theme';
+import { supabase } from '../../lib/supabase';
 import {
   MeridianLogo,
   PrimaryButton,
@@ -10,6 +11,10 @@ import {
 } from './shared';
 
 export default function WelcomeScreen({ navigation }) {
+  const handleSignIn = () => {
+    supabase.auth.signOut();
+  };
+
   return (
     <SafeAreaView style={onboardingStyles.safe} edges={['top', 'bottom']}>
       <ProgressDots step={1} />
@@ -28,6 +33,12 @@ export default function WelcomeScreen({ navigation }) {
           onPress={() => navigation.replace('Name')}
           style={styles.button}
         />
+        <View style={styles.signInRow}>
+          <Text style={styles.signInMuted}>Already have an account? </Text>
+          <TouchableOpacity onPress={handleSignIn} activeOpacity={0.7}>
+            <Text style={styles.signInLink}>Sign in</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </SafeAreaView>
   );
@@ -63,8 +74,24 @@ const styles = StyleSheet.create({
   },
   button: {
     alignSelf: 'center',
-    marginBottom: 60,
+    marginBottom: 16,
     paddingHorizontal: 48,
     minWidth: 200,
+  },
+  signInRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 32,
+  },
+  signInMuted: {
+    fontSize: 14,
+    fontFamily: 'DMSans_400Regular',
+    color: '#ffffff60',
+  },
+  signInLink: {
+    fontSize: 14,
+    fontFamily: 'DMSans_400Regular',
+    color: '#a78bfa',
   },
 });

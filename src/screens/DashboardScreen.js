@@ -12,8 +12,12 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Ionicons } from '@expo/vector-icons';
 import { COLORS, FONTS, AREA_COLORS } from '../constants/theme';
 import { supabase } from '../lib/supabase';
+import { calculateLoggingStreak, getStreakMilestone } from '../lib/streak';
+import LifeWheelCompact from '../components/LifeWheelCompact';
 import Svg, { Polygon } from 'react-native-svg';
 
 const DAY_NAMES = [
@@ -25,6 +29,14 @@ const DAY_NAMES = [
   'Friday',
   'Saturday',
 ];
+
+const MILESTONE_MESSAGES = {
+  7: 'A week of showing up.',
+  30: 'Thirty days of evidence.',
+  100: 'One hundred days logged.',
+};
+
+const STREAK_WARM = '#f97316';
 
 function formatLocalDateKey(d) {
   const y = d.getFullYear();
@@ -93,38 +105,6 @@ function isDueToday(habit, weekCountMap, todayKey) {
   }
 }
 
-function computeShowUpStreak(dateKeysWithActivity) {
-  let d = new Date();
-  if (!dateKeysWithActivity.has(formatLocalDateKey(d))) {
-    d = addDays(d, -1);
-  }
-  let streak = 0;
-  while (dateKeysWithActivity.has(formatLocalDateKey(d))) {
-    streak += 1;
-    d = addDays(d, -1);
-  }
-  return streak;
-}
-
-function computeBestStreak(dateKeysWithActivity) {
-  if (dateKeysWithActivity.size === 0) return 0;
-  const sorted = [...dateKeysWithActivity].sort();
-  let best = 1;
-  let run = 1;
-  for (let i = 1; i < sorted.length; i++) {
-    const prev = new Date(`${sorted[i - 1]}T12:00:00`);
-    const cur = new Date(`${sorted[i]}T12:00:00`);
-    const diff = Math.round((cur - prev) / 86400000);
-    if (diff === 1) {
-      run += 1;
-      if (run > best) best = run;
-    } else if (diff > 1) {
-      run = 1;
-    }
-  }
-  return best;
-}
-
 function headerDateLabel(d) {
   return d.toLocaleDateString('en-US', {
     weekday: 'long',
@@ -173,42 +153,6 @@ function formatIdentityConfirmation(statement) {
     text = text.replace(prefix, '');
   }
   return `You showed up as someone who ${text}`;
-}
-
-function getStreakHeroState(todayRate) {
-  const hour = new Date().getHours();
-  const isAfterSixPM = hour >= 18;
-
-  if (todayRate === 0) {
-    return {
-      color: COLORS.gold,
-      border: COLORS.gold,
-      status: 'How will you show up today?',
-      statusColor: COLORS.gold,
-    };
-  }
-  if (todayRate >= 0.5) {
-    return {
-      color: COLORS.streakColor,
-      border: COLORS.streakColor,
-      status: "You're still showing up ✦",
-      statusColor: COLORS.streakColor,
-    };
-  }
-  if (isAfterSixPM) {
-    return {
-      color: COLORS.red,
-      border: COLORS.red,
-      status: '⏰ Today is still here',
-      statusColor: COLORS.red,
-    };
-  }
-  return {
-    color: COLORS.gold,
-    border: COLORS.gold,
-    status: 'Show up for your commitments today',
-    statusColor: COLORS.gold,
-  };
 }
 
 function MeridianLogoSmall({ size = 32 }) {
@@ -376,19 +320,16 @@ export default function DashboardScreen() {
   const [todayByHabit, setTodayByHabit] = useState(() => new Map());
   const [weekCompletions, setWeekCompletions] = useState([]);
   const [streak, setStreak] = useState(0);
-  const [bestStreak, setBestStreak] = useState(0);
+  const [isTodayLogged, setIsTodayLogged] = useState(false);
+  const [showMilestoneCelebration, setShowMilestoneCelebration] = useState(false);
   const [toggleBusyId, setToggleBusyId] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [tasksDueToday, setTasksDueToday] = useState([]);
   const [tasksDueThisWeek, setTasksDueThisWeek] = useState([]);
   const [showGraceCard, setShowGraceCard] = useState(false);
-  const [showMilestone, setShowMilestone] = useState(false);
-  const [milestoneText, setMilestoneText] = useState('');
-  const [milestoneSubtext, setMilestoneSubtext] = useState('');
   const confirmationSlide = useRef(new Animated.Value(120)).current;
   const confirmationTimerRef = useRef(null);
   const graceFadeAnim = useRef(new Animated.Value(0)).current;
-  const milestoneAnim = useRef(new Animated.Value(0)).current;
 
   const dateSubtitle = useMemo(() => headerDateLabel(new Date()), []);
   const todayKey = useMemo(() => formatLocalDateKey(new Date()), []);
@@ -433,27 +374,64 @@ export default function DashboardScreen() {
     [dueToday, todayByHabit]
   );
 
-  const habitsForTodayRate = useMemo(() => {
-    const weekHabits = thisWeek.map((item) => item.habit);
-    return [...dueToday, ...weekHabits];
-  }, [dueToday, thisWeek]);
+  const activeMilestone = useMemo(() => getStreakMilestone(streak), [streak]);
 
-  const todayCompletionsCount = useMemo(
-    () => habitsForTodayRate.filter((h) => todayByHabit.has(h.id)).length,
-    [habitsForTodayRate, todayByHabit]
-  );
+  const dashboardWheelAreas = useMemo(() => {
+    const areas =
+      userAreas.length > 0
+        ? userAreas
+        : [...new Set(habits.map((h) => (h.area || 'general').toLowerCase()))].map(
+            (slug) => ({ slug, name: slug, color: getAreaColor(slug) })
+          );
 
-  const todayRate = useMemo(() => {
-    if (habitsForTodayRate.length === 0) return 0;
-    return todayCompletionsCount / habitsForTodayRate.length;
-  }, [habitsForTodayRate.length, todayCompletionsCount]);
+    const today = new Date();
 
-  const todayPct = Math.round(todayRate * 100);
+    return areas.slice(0, 8).map((ua) => {
+      const slug = (ua.slug || ua.area || '').toLowerCase();
+      const hasIdentity = userIdentities.some(
+        (i) => (i.area_slug || i.area || '').toLowerCase() === slug
+      );
+      const areaHabits = habits.filter((h) => (h.area || '').toLowerCase() === slug);
+      const hasCommitment = areaHabits.length > 0;
 
-  const streakHero = useMemo(
-    () => getStreakHeroState(todayRate),
-    [todayRate]
-  );
+      let spokeLengthRatio = 0;
+      if (hasIdentity && hasCommitment) spokeLengthRatio = 1.0;
+      else if (hasIdentity) spokeLengthRatio = 0.5;
+
+      const habitIds = new Set(areaHabits.map((h) => h.id));
+      let mostRecent = null;
+      for (const c of weekCompletions) {
+        if (habitIds.has(c.habit_id)) {
+          const d = String(c.completed_date).slice(0, 10);
+          if (!mostRecent || d > mostRecent) mostRecent = d;
+        }
+      }
+
+      let vibrancy = hasIdentity ? 0.4 : 0.15;
+      if (mostRecent) {
+        const diff =
+          (today - new Date(`${mostRecent}T12:00:00`)) / (1000 * 60 * 60 * 24);
+        if (diff <= 30) vibrancy = 1.0;
+        else if (diff <= 60) vibrancy = 0.5;
+        else vibrancy = 0.2;
+      }
+
+      const identityRow = userIdentities.find(
+        (i) => (i.area_slug || i.area || '').toLowerCase() === slug
+      );
+
+      return {
+        slug,
+        name: ua.name || slug,
+        color: ua.color || getAreaColor(slug),
+        spokeLengthRatio,
+        vibrancy,
+        identityStatement: identityRow?.statement
+          ? `I am someone who ${identityRow.statement}`
+          : null,
+      };
+    });
+  }, [userAreas, userIdentities, habits, weekCompletions]);
 
   const dismissConfirmation = useCallback(() => {
     Animated.timing(confirmationSlide, {
@@ -510,69 +488,26 @@ export default function DashboardScreen() {
     graceFadeAnim.setValue(0);
   }, [graceFadeAnim]);
 
-  const checkStreakMilestone = (streakCount) => {
-    const milestones = {
-      7: {
-        text: '7 Days Showing Up',
-        subtext: 'A week of evidence. This is who you are.',
-      },
-      21: {
-        text: '21 Days Showing Up',
-        subtext: 'Three weeks of proof. Your identity is clear.',
-      },
-      66: {
-        text: '66 Days Showing Up',
-        subtext: 'This is no longer a habit. It is simply you.',
-      },
-      100: {
-        text: '100 Days Showing Up',
-        subtext: 'One hundred days of being exactly who you said you were.',
-      },
-    };
-
-    if (milestones[streakCount]) {
-      setMilestoneText(milestones[streakCount].text);
-      setMilestoneSubtext(milestones[streakCount].subtext);
-      setShowMilestone(true);
-      Animated.sequence([
-        Animated.timing(milestoneAnim, {
-          toValue: 1,
-          duration: 400,
-          useNativeDriver: true,
-        }),
-        Animated.delay(3000),
-        Animated.timing(milestoneAnim, {
-          toValue: 0,
-          duration: 400,
-          useNativeDriver: true,
-        }),
-      ]).start(() => setShowMilestone(false));
-    }
-  };
-
   const recalcStreak = useCallback(async (uid) => {
-    const since = addDays(new Date(), -400);
-    const sinceKey = formatLocalDateKey(since);
+    const { currentStreak, isTodayLogged: loggedToday } =
+      await calculateLoggingStreak(uid);
+    setStreak(currentStreak);
+    setIsTodayLogged(loggedToday);
 
-    const { data: streakRows } = await supabase
-      .from('habit_completions')
-      .select('completed_date')
-      .eq('user_id', uid)
-      .gte('completed_date', sinceKey);
-
-    const datesWithActivity = new Set();
-    for (const row of streakRows ?? []) {
-      if (row.completed_date) {
-        datesWithActivity.add(String(row.completed_date).slice(0, 10));
+    const milestone = getStreakMilestone(currentStreak);
+    if (milestone) {
+      const storageKey = `streak_milestone_${milestone}_${todayKey}`;
+      const alreadyShown = await AsyncStorage.getItem(storageKey);
+      setShowMilestoneCelebration(!alreadyShown);
+      if (!alreadyShown) {
+        await AsyncStorage.setItem(storageKey, '1');
       }
+    } else {
+      setShowMilestoneCelebration(false);
     }
-    const streakVal = computeShowUpStreak(datesWithActivity);
-    const bestVal = computeBestStreak(datesWithActivity);
-    setStreak(streakVal);
-    checkStreakMilestone(streakVal);
-    setBestStreak(bestVal);
-    return { streak: streakVal, bestStreak: bestVal };
-  }, []);
+
+    return { currentStreak, isTodayLogged: loggedToday };
+  }, [todayKey]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -586,8 +521,8 @@ export default function DashboardScreen() {
       setTodayByHabit(new Map());
       setWeekCompletions([]);
       setStreak(0);
-      checkStreakMilestone(0);
-      setBestStreak(0);
+      setIsTodayLogged(false);
+      setShowMilestoneCelebration(false);
       setLoading(false);
       return;
     }
@@ -870,52 +805,6 @@ export default function DashboardScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['left', 'right']}>
-      {showMilestone && (
-        <Animated.View style={{
-          position: 'absolute',
-          top: 80,
-          left: 24,
-          right: 24,
-          zIndex: 999,
-          backgroundColor: '#1a1628',
-          borderRadius: 20,
-          padding: 24,
-          alignItems: 'center',
-          borderWidth: 1,
-          borderColor: '#a78bfa',
-          shadowColor: '#a78bfa',
-          shadowOffset: { width: 0, height: 0 },
-          shadowOpacity: 0.4,
-          shadowRadius: 20,
-          elevation: 10,
-          opacity: milestoneAnim,
-          transform: [{
-            translateY: milestoneAnim.interpolate({
-              inputRange: [0, 1],
-              outputRange: [-20, 0],
-            }),
-          }],
-        }}>
-          <Text style={{
-            fontSize: 28,
-            marginBottom: 8,
-          }}>✦</Text>
-          <Text style={{
-            fontSize: 22,
-            color: '#f5f3ff',
-            fontFamily: 'PlayfairDisplay_300Light',
-            textAlign: 'center',
-            marginBottom: 8,
-          }}>{milestoneText}</Text>
-          <Text style={{
-            fontSize: 14,
-            color: '#a78bfa',
-            fontFamily: 'DMSans_400Regular',
-            textAlign: 'center',
-            lineHeight: 22,
-          }}>{milestoneSubtext}</Text>
-        </Animated.View>
-      )}
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
@@ -959,195 +848,168 @@ export default function DashboardScreen() {
           </View>
         ) : (
           <>
-            <View
-              style={[
-                styles.streakHeroCard,
-                { borderLeftColor: streakHero.border },
-              ]}>
-              <Text style={styles.streakEmojiSide}>🔥</Text>
-              <View style={styles.streakHeroRight}>
-                <View style={styles.streakTopRow}>
-                  <Text
-                    style={[
-                      styles.streakNumberSide,
-                      { color: streakHero.color },
-                    ]}>
-                    {streak}
-                  </Text>
-                  <Text style={styles.streakDaysLabel}> days</Text>
-                </View>
-                <Text
-                  style={[
-                    styles.streakStatusSide,
-                    { color: streakHero.statusColor },
-                  ]}>
-                  {streakHero.status}
-                </Text>
-                {bestStreak > 0 ? (
-                  <Text style={styles.streakMetaLine}>
-                    Longest stretch: {bestStreak} days
-                  </Text>
-                ) : null}
-                <Text style={styles.streakMetaLine}>
-                  Today: {todayCompletionsCount} of {habitsForTodayRate.length}{' '}
-                  shown up
-                </Text>
-              </View>
-            </View>
-
-            {userIdentities.length > 0 ? (
-              <View style={styles.whoIAmSection}>
-                <Text style={styles.whoIAmTitle}>WHO I AM</Text>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.identityScrollContent}>
-                  {userIdentities.map((identity) => {
-                    const areaKey = identity.area_slug || identity.area;
-                    const areaColor = getAreaColor(areaKey);
-                    return (
-                      <View
-                        key={identity.id}
-                        style={[
-                          styles.identityCard,
-                          { borderLeftColor: areaColor },
-                        ]}>
-                        <Text
-                          style={[styles.identityAreaLabel, { color: areaColor }]}>
-                          {(areaKey || '').toUpperCase()}
-                        </Text>
-                        <Text style={styles.identityStatement}>
-                          I am someone who {identity.statement}
-                        </Text>
-                      </View>
-                    );
-                  })}
-                </ScrollView>
-              </View>
+            {isTodayLogged ? (
+              <Text style={styles.loggedStatusLine}>
+                Today&apos;s evidence: logged ✓
+              </Text>
             ) : null}
 
-            <Card>
-              <Text style={[styles.playfairSectionHeading, styles.playfairSectionHeadingFont]}>
-                Commitments
-              </Text>
+            <View
+              style={[
+                styles.streakLineWrap,
+                showMilestoneCelebration && styles.streakLineWrapMilestone,
+              ]}>
+              <View style={styles.streakLineRow}>
+                <Ionicons
+                  name="flame"
+                  size={showMilestoneCelebration ? 24 : 20}
+                  color={STREAK_WARM}
+                  style={styles.streakFlameIcon}
+                />
+                <Text
+                  style={[
+                    styles.streakLineText,
+                    showMilestoneCelebration && styles.streakLineTextMilestone,
+                  ]}>
+                  {streak === 1 ? '1 day showing up' : `${streak} days showing up`}
+                </Text>
+              </View>
+              {showMilestoneCelebration && activeMilestone ? (
+                <Text style={styles.streakMilestoneNote}>
+                  ✦ {MILESTONE_MESSAGES[activeMilestone]}
+                </Text>
+              ) : null}
+            </View>
 
-              <Text style={styles.sectionTitle}>DUE TODAY</Text>
-              {dueToday.length === 0 ? (
-                <Text style={styles.emptyText}>No commitments due today</Text>
-              ) : (
-                <>
-                  {dueToday.length > 0 && (
-                    <Text style={styles.dueCount}>
-                      {dueTodayDoneCount} of {dueToday.length} to show up for
-                    </Text>
-                  )}
-                  {dueToday.map((h) => {
-                    const busy = toggleBusyId === h.id;
-                    return (
-                      <HabitRow
-                        key={h.id}
-                        habit={h}
-                        completionType={todayByHabit.get(h.id) ?? null}
-                        busy={busy}
-                        onToggle={() => toggleHabit(h.id)}
-                        onLifeHappens={() => markLifeHappens(h.id)}
-                        variant="due"
-                      />
-                    );
-                  })}
-                </>
-              )}
+            <View style={styles.lifeWheelSection}>
+              <Text style={styles.lifeWheelSectionTitle}>Life wheel</Text>
+              <LifeWheelCompact areas={dashboardWheelAreas} />
+            </View>
 
-              {thisWeek.length > 0 && (
-                <>
-                  <View style={styles.sectionDivider} />
-                  <Text style={styles.sectionTitle}>THIS WEEK</Text>
-                  {thisWeek.map(({ habit, subtitle }) => {
-                    const busy = toggleBusyId === habit.id;
-                    return (
-                      <HabitRow
-                        key={habit.id}
-                        habit={habit}
-                        completionType={todayByHabit.get(habit.id) ?? null}
-                        busy={busy}
-                        onToggle={() => toggleWeekHabit(habit.id)}
-                        subtitle={subtitle}
-                        variant="week"
-                      />
-                    );
-                  })}
-                </>
-              )}
-            </Card>
-
-            {(tasksDueToday.length > 0 || tasksDueThisWeek.length > 0) ? (
+            <View style={styles.secondarySection}>
               <Card>
                 <Text style={[styles.playfairSectionHeading, styles.playfairSectionHeadingFont]}>
-                  Actions
+                  Commitments
                 </Text>
 
-                {tasksDueToday.length > 0 && (
+                <Text style={styles.sectionTitle}>DUE TODAY</Text>
+                {dueToday.length === 0 ? (
+                  <Text style={styles.emptyText}>No commitments due today</Text>
+                ) : (
                   <>
-                    <Text style={styles.sectionTitle}>DUE TODAY</Text>
-                    {tasksDueToday.map(task => {
-                      const areaKey = (task.goals?.area || '').toLowerCase();
-                      const areaColor = AREA_COLORS[areaKey] || COLORS.accent;
+                    {dueToday.length > 0 && (
+                      <Text style={styles.dueCount}>
+                        {dueTodayDoneCount} of {dueToday.length} to show up for
+                      </Text>
+                    )}
+                    {dueToday.map((h) => {
+                      const busy = toggleBusyId === h.id;
                       return (
-                        <TouchableOpacity
-                          key={task.id}
-                          style={styles.actionRow}
-                          onPress={() => toggleTask(task.id)}>
-                          <View style={[styles.actionCheck, { borderColor: areaColor }]}>
-                            <View style={[styles.actionCheckInner, { backgroundColor: areaColor }]} />
-                          </View>
-                          <View style={styles.actionContent}>
-                            <Text style={styles.actionTitle}>{task.title}</Text>
-                            <Text style={[styles.actionMeta, { color: areaColor }]}>
-                              {task.goals?.title || 'Pursuit'}
-                            </Text>
-                          </View>
-                        </TouchableOpacity>
+                        <HabitRow
+                          key={h.id}
+                          habit={h}
+                          completionType={todayByHabit.get(h.id) ?? null}
+                          busy={busy}
+                          onToggle={() => toggleHabit(h.id)}
+                          onLifeHappens={() => markLifeHappens(h.id)}
+                          variant="due"
+                        />
                       );
                     })}
                   </>
                 )}
 
-                {tasksDueThisWeek.length > 0 && (
+                {thisWeek.length > 0 && (
                   <>
-                    {tasksDueToday.length > 0 && <View style={styles.sectionDivider} />}
+                    <View style={styles.sectionDivider} />
                     <Text style={styles.sectionTitle}>THIS WEEK</Text>
-                    {tasksDueThisWeek.map(task => {
-                      const areaKey = (task.goals?.area || '').toLowerCase();
-                      const areaColor = AREA_COLORS[areaKey] || COLORS.accent;
-                      const dueDate = new Date(task.due_date + 'T00:00:00');
-                      const dueDateLabel = dueDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+                    {thisWeek.map(({ habit, subtitle }) => {
+                      const busy = toggleBusyId === habit.id;
                       return (
-                        <TouchableOpacity
-                          key={task.id}
-                          style={styles.actionRow}
-                          onPress={() => toggleTask(task.id)}>
-                          <View style={[styles.actionCheck, { borderColor: areaColor }]} />
-                          <View style={styles.actionContent}>
-                            <Text style={styles.actionTitle}>{task.title}</Text>
-                            <Text style={[styles.actionMeta, { color: areaColor }]}>
-                              {task.goals?.title || 'Pursuit'} · Due {dueDateLabel}
-                            </Text>
-                          </View>
-                        </TouchableOpacity>
+                        <HabitRow
+                          key={habit.id}
+                          habit={habit}
+                          completionType={todayByHabit.get(habit.id) ?? null}
+                          busy={busy}
+                          onToggle={() => toggleWeekHabit(habit.id)}
+                          subtitle={subtitle}
+                          variant="week"
+                        />
                       );
                     })}
                   </>
                 )}
               </Card>
-            ) : (
-              <Card>
-                <Text style={[styles.playfairSectionHeading, styles.playfairSectionHeadingFont]}>
-                  Actions
-                </Text>
-                <Text style={styles.emptyText}>No actions due this week.</Text>
-                <Text style={styles.emptySubtext}>Add milestones to your pursuits to see them here.</Text>
-              </Card>
-            )}
+
+              {(tasksDueToday.length > 0 || tasksDueThisWeek.length > 0) ? (
+                <Card>
+                  <Text style={[styles.playfairSectionHeading, styles.playfairSectionHeadingFont]}>
+                    Actions
+                  </Text>
+
+                  {tasksDueToday.length > 0 && (
+                    <>
+                      <Text style={styles.sectionTitle}>DUE TODAY</Text>
+                      {tasksDueToday.map(task => {
+                        const areaKey = (task.goals?.area || '').toLowerCase();
+                        const areaColor = AREA_COLORS[areaKey] || COLORS.accent;
+                        return (
+                          <TouchableOpacity
+                            key={task.id}
+                            style={styles.actionRow}
+                            onPress={() => toggleTask(task.id)}>
+                            <View style={[styles.actionCheck, { borderColor: areaColor }]}>
+                              <View style={[styles.actionCheckInner, { backgroundColor: areaColor }]} />
+                            </View>
+                            <View style={styles.actionContent}>
+                              <Text style={styles.actionTitle}>{task.title}</Text>
+                              <Text style={[styles.actionMeta, { color: areaColor }]}>
+                                {task.goals?.title || 'Pursuit'}
+                              </Text>
+                            </View>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </>
+                  )}
+
+                  {tasksDueThisWeek.length > 0 && (
+                    <>
+                      {tasksDueToday.length > 0 && <View style={styles.sectionDivider} />}
+                      <Text style={styles.sectionTitle}>THIS WEEK</Text>
+                      {tasksDueThisWeek.map(task => {
+                        const areaKey = (task.goals?.area || '').toLowerCase();
+                        const areaColor = AREA_COLORS[areaKey] || COLORS.accent;
+                        const dueDate = new Date(task.due_date + 'T00:00:00');
+                        const dueDateLabel = dueDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+                        return (
+                          <TouchableOpacity
+                            key={task.id}
+                            style={styles.actionRow}
+                            onPress={() => toggleTask(task.id)}>
+                            <View style={[styles.actionCheck, { borderColor: areaColor }]} />
+                            <View style={styles.actionContent}>
+                              <Text style={styles.actionTitle}>{task.title}</Text>
+                              <Text style={[styles.actionMeta, { color: areaColor }]}>
+                                {task.goals?.title || 'Pursuit'} · Due {dueDateLabel}
+                              </Text>
+                            </View>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </>
+                  )}
+                </Card>
+              ) : (
+                <Card>
+                  <Text style={[styles.playfairSectionHeading, styles.playfairSectionHeadingFont]}>
+                    Actions
+                  </Text>
+                  <Text style={styles.emptyText}>No actions due this week.</Text>
+                  <Text style={styles.emptySubtext}>Add milestones to your pursuits to see them here.</Text>
+                </Card>
+              )}
+            </View>
           </>
         )}
       </ScrollView>
@@ -1233,48 +1095,13 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.body,
   },
   playfairSectionHeading: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: '300',
     color: COLORS.text,
-    marginBottom: 12,
+    marginBottom: 10,
   },
   playfairSectionHeadingFont: {
     fontFamily: 'PlayfairDisplay_300Light',
-  },
-  whoIAmSection: {
-    marginBottom: 16,
-  },
-  whoIAmTitle: {
-    fontSize: 9,
-    letterSpacing: 1.5,
-    color: COLORS.accent,
-    textTransform: 'uppercase',
-    marginBottom: 12,
-    fontFamily: FONTS.bodyMedium,
-  },
-  identityScrollContent: {
-    paddingRight: 8,
-  },
-  identityCard: {
-    backgroundColor: COLORS.surface,
-    borderRadius: 16,
-    padding: 16,
-    marginRight: 12,
-    width: 200,
-    borderLeftWidth: 3,
-  },
-  identityAreaLabel: {
-    fontSize: 12,
-    letterSpacing: 1,
-    marginBottom: 8,
-    fontFamily: FONTS.body,
-  },
-  identityStatement: {
-    fontSize: 13,
-    color: COLORS.text,
-    fontStyle: 'italic',
-    fontWeight: '300',
-    lineHeight: 20,
   },
   loaderWrap: {
     paddingVertical: 48,
@@ -1282,50 +1109,84 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: COLORS.surface,
-    borderRadius: 20,
-    padding: 20,
-    marginBottom: 16,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
     overflow: 'hidden',
   },
-  streakHeroCard: {
+  secondarySection: {
+    marginTop: 8,
+    opacity: 0.92,
+  },
+  loggedStatusLine: {
+    fontSize: 14,
+    color: COLORS.mutedLight,
+    fontFamily: FONTS.body,
+    fontStyle: 'italic',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  streakLineWrap: {
+    alignItems: 'center',
+    marginBottom: 6,
+    marginTop: 0,
+    paddingVertical: 2,
+  },
+  streakLineWrapMilestone: {
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderRadius: 16,
+    backgroundColor: 'rgba(167, 139, 250, 0.06)',
+    shadowColor: '#a78bfa',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.35,
+    shadowRadius: 16,
+    elevation: 4,
+  },
+  streakLineRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 20,
-    borderRadius: 20,
-    borderLeftWidth: 3,
-    backgroundColor: COLORS.surface,
-    marginBottom: 16,
-    overflow: 'hidden',
+    justifyContent: 'center',
   },
-  streakEmojiSide: {
-    fontSize: 40,
+  streakFlameIcon: {
+    marginRight: 8,
   },
-  streakHeroRight: {
-    flex: 1,
-    paddingLeft: 16,
+  streakLineText: {
+    fontSize: 18,
+    color: STREAK_WARM,
+    fontFamily: FONTS.bodyMedium,
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
   },
-  streakTopRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
+  streakLineTextMilestone: {
+    fontSize: 22,
+    color: STREAK_WARM,
+    fontFamily: 'PlayfairDisplay_300Light',
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
   },
-  streakNumberSide: {
-    fontSize: 48,
-    fontWeight: '700',
-  },
-  streakDaysLabel: {
-    fontSize: 16,
+  streakMilestoneNote: {
+    marginTop: 6,
+    fontSize: 13,
     color: COLORS.mutedLight,
-    alignSelf: 'flex-end',
-    paddingBottom: 8,
+    fontFamily: FONTS.body,
+    fontStyle: 'italic',
+    textAlign: 'center',
   },
-  streakStatusSide: {
-    fontSize: 12,
-    marginTop: 4,
+  lifeWheelSection: {
+    alignItems: 'center',
+    marginBottom: 12,
+    marginTop: 0,
+    opacity: 0.85,
   },
-  streakMetaLine: {
-    fontSize: 11,
+  lifeWheelSectionTitle: {
+    fontSize: 9,
+    letterSpacing: 2,
     color: COLORS.muted,
-    marginTop: 4,
+    textTransform: 'uppercase',
+    fontFamily: FONTS.bodyMedium,
+    marginBottom: 0,
+    alignSelf: 'flex-start',
   },
   sectionTitle: {
     fontSize: 9,

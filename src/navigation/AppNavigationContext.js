@@ -4,6 +4,7 @@ export const AppNavigationContext = createContext({
   openLegacy: () => {},
   openInsights: () => {},
   openSettings: () => {},
+  openDashboard: () => {},
 });
 
 export function useAppNavigation() {

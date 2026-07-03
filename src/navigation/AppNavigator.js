@@ -6,8 +6,16 @@ import TermsScreen from '../screens/TermsScreen';
 import DisclaimerScreen from '../screens/DisclaimerScreen';
 import IdentityManagementScreen from '../screens/IdentityManagementScreen';
 import AreasManagementScreen from '../screens/AreasManagementScreen';
+import NewPursuitScreen from '../screens/NewPursuitScreen';
+import PursuitDetailScreen from '../screens/PursuitDetailScreen';
 
 const Stack = createStackNavigator();
+
+const stackScreenOptions = {
+  headerStyle: { backgroundColor: '#0f0d1a' },
+  headerTintColor: '#f5f3ff',
+  headerTitleStyle: { fontFamily: 'DMSans_500Medium' },
+};
 
 export default function AppNavigator() {
   return (
@@ -62,9 +70,23 @@ export default function AppNavigator() {
         component={AreasManagementScreen}
         options={{
           title: 'Life Areas',
-          headerStyle: { backgroundColor: '#0f0d1a' },
-          headerTintColor: '#f5f3ff',
-          headerTitleStyle: { fontFamily: 'DMSans_500Medium' },
+          ...stackScreenOptions,
+        }}
+      />
+      <Stack.Screen
+        name="NewPursuit"
+        component={NewPursuitScreen}
+        options={{
+          title: 'New pursuit',
+          ...stackScreenOptions,
+        }}
+      />
+      <Stack.Screen
+        name="PursuitDetail"
+        component={PursuitDetailScreen}
+        options={{
+          title: 'Pursuit',
+          ...stackScreenOptions,
         }}
       />
     </Stack.Navigator>

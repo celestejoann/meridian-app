@@ -13,12 +13,14 @@ import {
   PlayfairDisplay_700Bold,
 } from '@expo-google-fonts/playfair-display';
 import { NavigationContainer } from '@react-navigation/native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { supabase } from './src/lib/supabase';
 import { COLORS } from './src/constants/theme';
 import AuthScreen from './src/screens/AuthScreen';
 import AppNavigator from './src/navigation/AppNavigator';
 import OnboardingNavigator from './src/navigation/OnboardingNavigator';
+import CheckInScreen from './src/screens/CheckInScreen';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -38,6 +40,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [appReady, setAppReady] = useState(false);
   const [needsOnboarding, setNeedsOnboarding] = useState(null);
+  const [checkInGateComplete, setCheckInGateComplete] = useState(false);
 
   const [fontsLoaded] = useFonts({
     DMSans_400Regular,
@@ -74,7 +77,11 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!session) return;
+    if (!session) {
+      setNeedsOnboarding(null);
+      setCheckInGateComplete(false);
+      return;
+    }
 
     const checkOnboarding = async () => {
       const { data: areas } = await supabase
@@ -95,57 +102,76 @@ export default function App() {
 
   const handleOnboardingComplete = () => {
     setNeedsOnboarding(false);
+    setCheckInGateComplete(false);
   };
 
   if (loading || (!fontsLoaded && !appReady)) {
     return (
-      <SafeAreaProvider>
-        <View
-          style={{
-            flex: 1,
-            backgroundColor: COLORS.bg,
-            justifyContent: 'center',
-            alignItems: 'center',
-          }}>
-          <ActivityIndicator color={COLORS.accent} size={32} />
-        </View>
-      </SafeAreaProvider>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <SafeAreaProvider>
+          <View
+            style={{
+              flex: 1,
+              backgroundColor: COLORS.bg,
+              justifyContent: 'center',
+              alignItems: 'center',
+            }}>
+            <ActivityIndicator color={COLORS.accent} size={32} />
+          </View>
+        </SafeAreaProvider>
+      </GestureHandlerRootView>
     );
   }
 
   if (!session) {
     return (
-      <SafeAreaProvider>
-        <AuthScreen />
-      </SafeAreaProvider>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <SafeAreaProvider>
+          <AuthScreen />
+        </SafeAreaProvider>
+      </GestureHandlerRootView>
     );
   }
 
   if (needsOnboarding === null) {
     return (
-      <SafeAreaProvider>
-        <View
-          style={{
-            flex: 1,
-            backgroundColor: COLORS.bg,
-            justifyContent: 'center',
-            alignItems: 'center',
-          }}>
-          <ActivityIndicator color={COLORS.accent} size={32} />
-        </View>
-      </SafeAreaProvider>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <SafeAreaProvider>
+          <View
+            style={{
+              flex: 1,
+              backgroundColor: COLORS.bg,
+              justifyContent: 'center',
+              alignItems: 'center',
+            }}>
+            <ActivityIndicator color={COLORS.accent} size={32} />
+          </View>
+        </SafeAreaProvider>
+      </GestureHandlerRootView>
+    );
+  }
+
+  if (!needsOnboarding && !checkInGateComplete) {
+    return (
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <SafeAreaProvider>
+          <CheckInScreen gate onGateComplete={() => setCheckInGateComplete(true)} />
+        </SafeAreaProvider>
+      </GestureHandlerRootView>
     );
   }
 
   return (
-    <SafeAreaProvider>
-      <NavigationContainer>
-        {needsOnboarding ? (
-          <OnboardingNavigator onComplete={handleOnboardingComplete} />
-        ) : (
-          <AppNavigator />
-        )}
-      </NavigationContainer>
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <NavigationContainer>
+          {needsOnboarding ? (
+            <OnboardingNavigator onComplete={handleOnboardingComplete} />
+          ) : (
+            <AppNavigator />
+          )}
+        </NavigationContainer>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }

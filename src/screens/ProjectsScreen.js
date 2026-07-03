@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -12,21 +12,11 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { supabase } from '../lib/supabase';
 import MeridianWordmark from '../components/MeridianWordmark';
 import { COLORS, FONTS, AREA_COLORS } from '../constants/theme';
-
-const DEFAULT_AREAS = [
-  'health',
-  'finance',
-  'career',
-  'relationships',
-  'growth',
-  'recreation',
-  'spirituality',
-];
 
 function areaDisplayName(area) {
   return (area || 'area').replace(/^\w/, (c) => c.toUpperCase());
@@ -57,11 +47,10 @@ function AreaPill({ area }) {
 }
 
 export default function ProjectsScreen() {
+  const navigation = useNavigation();
   const [userId, setUserId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [userAreas, setUserAreas] = useState([]);
   const [userIdentities, setUserIdentities] = useState([]);
   const [habits, setHabits] = useState([]);
   const [completions, setCompletions] = useState([]);
@@ -70,11 +59,7 @@ export default function ProjectsScreen() {
   const [tasksByGoal, setTasksByGoal] = useState(new Map());
   const [expandedGoalId, setExpandedGoalId] = useState(null);
   const [legacyExpanded, setLegacyExpanded] = useState(false);
-  const [showForm, setShowForm] = useState(false);
 
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [selectedArea, setSelectedArea] = useState(null);
   const [newActionTitle, setNewActionTitle] = useState('');
   const [addingActionFor, setAddingActionFor] = useState(null);
   const [newActionDate, setNewActionDate] = useState(null);
@@ -90,22 +75,6 @@ export default function ProjectsScreen() {
     const identity = userIdentities.find(i => i.area_slug === areaSlug);
     return identity?.statement || null;
   };
-
-  const areaOptions = useMemo(() => {
-    if (userAreas.length > 0) {
-      return userAreas.map((ua) => ({
-        key: (ua.area || ua.name || '').toLowerCase(),
-        name:
-          ua.name ||
-          ua.display_name ||
-          areaDisplayName(ua.area || ua.name),
-      }));
-    }
-    return DEFAULT_AREAS.map((key) => ({
-      key,
-      name: areaDisplayName(key),
-    }));
-  }, [userAreas]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -129,14 +98,12 @@ export default function ProjectsScreen() {
     const sevenDaysAgoKey = sevenDaysAgo.toISOString().split('T')[0];
 
     const [
-      { data: areasData },
       { data: activeData },
       { data: legacyData },
       { data: identitiesData },
       { data: habitsData },
       { data: completionsData },
     ] = await Promise.all([
-      supabase.from('user_areas').select('*').eq('user_id', uid),
       supabase
         .from('goals')
         .select('*')
@@ -161,7 +128,6 @@ export default function ProjectsScreen() {
         .gte('completed_date', sevenDaysAgoKey),
     ]);
 
-    setUserAreas(areasData ?? []);
     setUserIdentities(identitiesData ?? []);
     setHabits(habitsData ?? []);
     setCompletions(completionsData ?? []);
@@ -216,38 +182,6 @@ export default function ProjectsScreen() {
     await load();
     setRefreshing(false);
   }, [load]);
-
-  useEffect(() => {
-    if (areaOptions.length > 0 && selectedArea == null) {
-      setSelectedArea(areaOptions[0].key);
-    }
-  }, [areaOptions, selectedArea]);
-
-  const resetForm = () => {
-    setTitle('');
-    setDescription('');
-    setShowForm(false);
-    if (areaOptions.length > 0) {
-      setSelectedArea(areaOptions[0].key);
-    }
-  };
-
-  const handleCreateProject = async () => {
-    if (!userId || !title.trim() || !selectedArea) return;
-    setSaving(true);
-    const { error } = await supabase.from('goals').insert({
-      user_id: userId,
-      title: title.trim(),
-      area: selectedArea,
-      description: description.trim() || null,
-      status: 'active',
-    });
-    setSaving(false);
-    if (!error) {
-      resetForm();
-      await load();
-    }
-  };
 
   const toggleTask = async (task) => {
     const nextComplete = !isTaskComplete(task);
@@ -333,74 +267,12 @@ export default function ProjectsScreen() {
           <View style={styles.titleCol}>
             <Text style={styles.headerSubtitle}>Meaningful work in motion</Text>
           </View>
-          {!showForm ? (
-            <TouchableOpacity
-              style={styles.newProjectBtn}
-              onPress={() => setShowForm(true)}>
-              <Text style={styles.newProjectBtnText}>+ Begin a pursuit</Text>
-            </TouchableOpacity>
-          ) : null}
+          <TouchableOpacity
+            style={styles.newProjectBtn}
+            onPress={() => navigation.navigate('NewPursuit')}>
+            <Text style={styles.newProjectBtnText}>+ Add pursuit</Text>
+          </TouchableOpacity>
         </View>
-
-        {showForm ? (
-          <View style={styles.formCard}>
-            <Text style={styles.formSectionLabel}>LIFE AREA</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 4 }}>
-              {areaOptions.map(area => {
-                const areaKey = (area.key || area.area || area.slug || '').toLowerCase();
-                const color = AREA_COLORS[areaKey] || COLORS.accent;
-                const isSelected = selectedArea === areaKey;
-                return (
-                  <TouchableOpacity
-                    key={areaKey}
-                    style={[styles.areaChip, isSelected && { backgroundColor: color + '33', borderColor: color }]}
-                    onPress={() => setSelectedArea(areaKey)}>
-                    <Text style={[styles.areaChipText, isSelected && { color }]}>{area.name}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-
-            {selectedArea && getIdentityForArea(selectedArea) && (
-              <View style={styles.identityHint}>
-                <Text style={styles.identityHintText}>
-                  I am someone who {getIdentityForArea(selectedArea)}
-                </Text>
-              </View>
-            )}
-
-            <Text style={styles.formSectionLabel}>PURSUIT</Text>
-            <TextInput
-              style={styles.formInput}
-              placeholder="What are you working toward?"
-              placeholderTextColor={COLORS.muted}
-              value={title}
-              onChangeText={setTitle}
-            />
-
-            <Text style={styles.formSectionLabel}>DESCRIPTION (optional)</Text>
-            <TextInput
-              style={[styles.formInput, { minHeight: 70, textAlignVertical: 'top' }]}
-              placeholder="What this means to you..."
-              placeholderTextColor={COLORS.muted}
-              value={description}
-              onChangeText={setDescription}
-              multiline
-            />
-
-            <View style={styles.formActions}>
-              <TouchableOpacity style={styles.cancelBtn} onPress={() => { resetForm(); setShowForm(false); }}>
-                <Text style={styles.cancelBtnText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.beginBtn, (!title.trim() || !selectedArea || saving) && styles.beginBtnDisabled]}
-                onPress={handleCreateProject}
-                disabled={!title.trim() || !selectedArea || saving}>
-                <Text style={styles.beginBtnText}>{saving ? 'Saving...' : 'Begin pursuit'}</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        ) : null}
 
         {loading ? (
           <View style={styles.loaderWrap}>
@@ -433,7 +305,7 @@ export default function ProjectsScreen() {
               </View>
             ) : null}
 
-            {activeGoals.length === 0 && (legacyGoals.length > 0 || showForm) ? (
+            {activeGoals.length === 0 && legacyGoals.length > 0 ? (
               <Text style={styles.sectionEmpty}>No pursuits in motion</Text>
             ) : null}
 
@@ -447,7 +319,9 @@ export default function ProjectsScreen() {
                 <TouchableOpacity
                   key={goal.id}
                   style={[styles.pursuitCard, expanded && styles.pursuitCardExpanded]}
-                  onPress={() => setExpandedGoalId(expanded ? null : goal.id)}
+                  onPress={() => navigation.navigate('PursuitDetail', { pursuitId: goal.id })}
+                  onLongPress={() => setExpandedGoalId(expanded ? null : goal.id)}
+                  delayLongPress={350}
                   activeOpacity={0.85}>
 
                   <View style={styles.pursuitAreaRow}>

@@ -9,7 +9,7 @@ import { COLORS, FONTS } from '../constants/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import DashboardScreen from '../screens/DashboardScreen';
-import JournalScreen from '../screens/JournalScreen';
+import CheckInScreen from '../screens/CheckInScreen';
 import InsightsScreen from '../screens/InsightsScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import MyLifeScreen from '../screens/MyLifeScreen';
@@ -18,7 +18,7 @@ import { AppNavigationContext } from './AppNavigationContext';
 
 const BOTTOM_TABS = [
   { key: 'dashboard', label: 'Dashboard', icon: 'home', iconOutline: 'home-outline' },
-  { key: 'journal', label: 'Journal', icon: 'book', iconOutline: 'book-outline' },
+  { key: 'checkin', label: 'Check In', icon: 'checkbox', iconOutline: 'checkbox-outline' },
   { key: 'mylife', label: 'My Life', icon: 'layers', iconOutline: 'layers-outline' },
   { key: 'insights', label: 'Insights', icon: 'bar-chart', iconOutline: 'bar-chart-outline' },
   { key: 'settings', label: 'Settings', icon: 'settings', iconOutline: 'settings-outline' },
@@ -40,9 +40,13 @@ export default function MainApp() {
     setBottomTab('settings');
   }, []);
 
+  const openDashboard = useCallback(() => {
+    setBottomTab('dashboard');
+  }, []);
+
   const navContext = useMemo(
-    () => ({ openLegacy, openInsights, openSettings }),
-    [openLegacy, openInsights, openSettings]
+    () => ({ openLegacy, openInsights, openSettings, openDashboard }),
+    [openLegacy, openInsights, openSettings, openDashboard]
   );
 
   const selectBottomTab = useCallback((key) => {
@@ -53,8 +57,8 @@ export default function MainApp() {
     switch (bottomTab) {
       case 'dashboard':
         return <DashboardScreen />;
-      case 'journal':
-        return <JournalScreen />;
+      case 'checkin':
+        return <CheckInScreen />;
       case 'mylife':
         return <MyLifeScreen />;
       case 'insights':

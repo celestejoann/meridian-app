@@ -64,3 +64,25 @@ export async function calculateLoggingStreak(userId) {
 
   return { currentStreak, isTodayLogged };
 }
+
+/** Days in window with ≥1 habit completion or general_note (matches streak "logged" days). */
+export function countLoggingDaysInWindow(completionRows, noteRows, windowDateKeys) {
+  const windowSet = new Set(windowDateKeys);
+  const activeDates = new Set();
+
+  for (const row of completionRows ?? []) {
+    if (row.completed_date) {
+      const key = String(row.completed_date).slice(0, 10);
+      if (windowSet.has(key)) activeDates.add(key);
+    }
+  }
+
+  for (const row of noteRows ?? []) {
+    if (row.created_at) {
+      const key = formatLocalDateKey(new Date(row.created_at));
+      if (windowSet.has(key)) activeDates.add(key);
+    }
+  }
+
+  return activeDates.size;
+}

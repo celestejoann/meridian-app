@@ -27,10 +27,6 @@ export default function MainApp() {
   const insets = useSafeAreaInsets();
   const [bottomTab, setBottomTab] = useState('dashboard');
 
-  const openLegacy = useCallback(() => {
-    setBottomTab('legacy');
-  }, []);
-
   const openInsights = useCallback(() => {
     setBottomTab('insights');
   }, []);
@@ -53,14 +49,13 @@ export default function MainApp() {
 
   const navContext = useMemo(
     () => ({
-      openLegacy,
       openInsights,
       openSettings,
       openDashboard,
       openCheckIn,
       openMyLife,
     }),
-    [openLegacy, openInsights, openSettings, openDashboard, openCheckIn, openMyLife]
+    [openInsights, openSettings, openDashboard, openCheckIn, openMyLife]
   );
 
   const selectBottomTab = useCallback((key) => {

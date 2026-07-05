@@ -11,12 +11,14 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import MeridianWordmark from '../components/MeridianWordmark';
+import LifeWheelCompact from '../components/LifeWheelCompact';
 import { useAppNavigation } from '../navigation/AppNavigationContext';
+import { countLoggingDaysInWindow } from '../lib/streak';
 import { COLORS, FONTS, AREA_COLORS } from '../constants/theme';
-import Svg, { Polygon, Circle, Line, Text as SvgText, Defs, RadialGradient, Stop } from 'react-native-svg';
 
 const AREA_ICONS = {
   health: '💚',
@@ -32,12 +34,17 @@ const MEDALS = ['🥇', '🥈', '🥉'];
 
 const GAP = 2;
 
+const CARD_RADIUS = 26;
+const CARD_GRADIENT = ['#1a1730', '#2a2145', '#231d38'];
+const CARD_GRADIENT_LOCATIONS = [0, 0.55, 1];
+const PLAYFAIR = 'PlayfairDisplay_300Light';
+
 const HEATMAP_COLORS = {
-  none: COLORS.surfaceLight,
-  low: COLORS.surface,
-  midLow: COLORS.surfaceLight,
-  midHigh: COLORS.accentDim,
-  high: COLORS.accent,
+  none: 'rgba(167, 139, 250, 0.06)',
+  low: 'rgba(167, 139, 250, 0.14)',
+  midLow: 'rgba(167, 139, 250, 0.28)',
+  midHigh: 'rgba(167, 139, 250, 0.48)',
+  high: 'rgba(196, 181, 253, 0.72)',
 };
 
 const TIMEFRAME_OPTIONS = [
@@ -47,16 +54,18 @@ const TIMEFRAME_OPTIONS = [
   { label: '1 year', days: 365 },
 ];
 
-const WEEK_INSIGHT_PROMPT = `You are the Reflective Mirror — a warm, grounding presence that helps people see themselves clearly. You speak in second person, present tense. You never use spiritual or religious language. You are not a coach or therapist — you are a mirror.
+const WEEK_INSIGHT_PROMPT = `You are the Reflective Mirror — warm but honest, not clinical. You speak in second person, present tense. You never use spiritual or religious language. You are not a coach or therapist — you are a mirror.
 
-Based on this user's data from the last 7 days, provide two things:
+Based ONLY on the structured stats below, write ONE paragraph of pattern observation. Under 80 words.
 
-1. PATTERN (1-2 sentences): One specific, data-driven observation about their behavior or consistency. Reference actual numbers or areas. Start with 'You tend to...' or 'Your [area] shows...' or similar.
-
-2. IDENTITY (1-2 sentences): A present-tense identity affirmation grounded in their actual data and identity statements. Start with 'You are someone who...'
-
-Keep the total response under 80 words.
-Do not use bullet points or headers in the response — just two short paragraphs.`;
+Rules:
+- Pattern observation only — no identity affirmations (never "You are someone who...")
+- No forced positivity or motivational closing; if an area went quiet or a gap shows in the data, say so plainly
+- Use concrete, specific language tied to the actual numbers and area names in the data
+- Use logging_consistency directly: say how many days she logged (e.g. "You logged on 5 of the last 7 days") — do not infer this from raw completion events
+- Good example: "You logged on 5 of the last 7 days. Health saw activity most of the week. Relationships hasn't come up this week."
+- Bad example: vague summaries like "you're doing great in some areas" or "keep up the good work"
+- No bullet points, headers, or line breaks — one flowing paragraph only`;
 
 function formatLocalDateKey(d) {
   const y = d.getFullYear();
@@ -316,179 +325,49 @@ function SectionTitle({ children }) {
   return <Text style={styles.sectionTitle}>{children}</Text>;
 }
 
-function HeroStatCard({ emoji, value, label }) {
+function GradientCard({ children, style, shellStyle, onLayout }) {
   return (
-    <View style={styles.heroCard}>
-      {emoji ? <Text style={styles.heroEmoji}>{emoji}</Text> : null}
-      <Text style={styles.heroValue}>{value}</Text>
-      <Text style={styles.heroLabel}>{label}</Text>
+    <View style={[styles.gradientCardShell, shellStyle]} onLayout={onLayout}>
+      <LinearGradient
+        colors={CARD_GRADIENT}
+        locations={CARD_GRADIENT_LOCATIONS}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 0.35, y: 1 }}
+        style={[styles.gradientCard, style]}>
+        {children}
+      </LinearGradient>
     </View>
   );
 }
 
-function LifeWheel({ areas, selectedArea, onSelectArea }) {
-  const size = 340;
-  const cx = size / 2;
-  const cy = size / 2;
-  const maxRadius = 80;
-  const totalAreas = areas.length;
-
-  if (totalAreas === 0) {
-    return (
-      <View style={{ height: 300, alignItems: 'center', justifyContent: 'center' }}>
-        <Text style={{ color: '#6b5fa0', fontFamily: 'DMSans_400Regular', fontSize: 14 }}>
-          Add life areas to see your wheel
-        </Text>
-      </View>
-    );
-  }
-
-  const getPoint = (index, radius) => {
-    const angle = (index / totalAreas) * 2 * Math.PI - Math.PI / 2;
-    return {
-      x: cx + radius * Math.cos(angle),
-      y: cy + radius * Math.sin(angle),
-      angle,
-    };
-  };
-
-  // Grid rings as connected polygons
-  const gridRings = [0.25, 0.5, 0.75, 1.0].map(ratio => {
-    const points = Array.from({ length: totalAreas }, (_, i) => {
-      const p = getPoint(i, maxRadius * ratio);
-      return `${p.x},${p.y}`;
-    }).join(' ');
-    return { points, ratio };
-  });
-
-  // Data polygon — connects all area data points
-  const dataPoints = areas.map((area, i) => {
-    const r = area.spokeLengthRatio * maxRadius;
-    const p = getPoint(i, r);
-    return p;
-  });
-  const dataPolygonPoints = dataPoints.map(p => `${p.x},${p.y}`).join(' ');
-
-  // Spoke lines from center to outer ring
-  const spokeLines = Array.from({ length: totalAreas }, (_, i) => {
-    const outer = getPoint(i, maxRadius);
-    return { x2: outer.x, y2: outer.y };
-  });
-
-  // Area labels and dots
-  const labelRadius = maxRadius + 38;
-  const dotRadius = maxRadius + 16;
-
+function InsightGradientCard({ children }) {
   return (
-    <Svg width={size} height={size + 60}>
-      <Defs>
-        <RadialGradient id="wheelFill" cx="50%" cy="50%" r="50%">
-          <Stop offset="0%" stopColor="#a78bfa" stopOpacity="0.05" />
-          <Stop offset="100%" stopColor="#a78bfa" stopOpacity="0.18" />
-        </RadialGradient>
-      </Defs>
+    <View style={styles.insightCardShell}>
+      <View style={styles.insightCardGlow} pointerEvents="none" />
+      <LinearGradient
+        colors={CARD_GRADIENT}
+        locations={CARD_GRADIENT_LOCATIONS}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 0.35, y: 1 }}
+        style={styles.insightCardGradient}>
+        {children}
+      </LinearGradient>
+    </View>
+  );
+}
 
-      {/* Grid rings */}
-      {gridRings.map(({ points, ratio }) => (
-        <Polygon
-          key={ratio}
-          points={points}
-          fill="none"
-          stroke="#2a2040"
-          strokeWidth={ratio === 1.0 ? 1.5 : 1}
-        />
-      ))}
-
-      {/* Spoke lines */}
-      {spokeLines.map((s, i) => (
-        <Line
-          key={i}
-          x1={cx} y1={cy}
-          x2={s.x2} y2={s.y2}
-          stroke="#2a2040"
-          strokeWidth={1}
-        />
-      ))}
-
-      {/* Data polygon fill */}
-      {dataPoints.some(p => p.x !== cx || p.y !== cy) && (
-        <Polygon
-          points={dataPolygonPoints}
-          fill="url(#wheelFill)"
-          stroke="#a78bfa"
-          strokeWidth={1.5}
-          strokeOpacity={0.6}
-        />
-      )}
-
-      {/* Colored area endpoint dots */}
-      {areas.map((area, i) => {
-        const r = area.spokeLengthRatio * maxRadius;
-        if (r === 0) return null;
-        const p = getPoint(i, r);
-        const isSelected = selectedArea === area.slug;
-        return (
-          <Circle
-            key={`dot-${i}`}
-            cx={p.x}
-            cy={p.y}
-            r={isSelected ? 7 : 5}
-            fill={area.color || '#a78bfa'}
-            fillOpacity={area.vibrancy}
-            stroke={isSelected ? '#ffffff' : 'none'}
-            strokeWidth={1.5}
-          />
-        );
-      })}
-
-      {/* Pursuit dots — glowing dot outside the wheel */}
-      {areas.map((area, i) => {
-        if (!area.hasPursuit) return null;
-        const p = getPoint(i, dotRadius);
-        return (
-          <Circle
-            key={`pursuit-${i}`}
-            cx={p.x}
-            cy={p.y}
-            r={3}
-            fill={area.color || '#a78bfa'}
-            fillOpacity={area.vibrancy * 0.8}
-          />
-        );
-      })}
-
-      {/* Area labels */}
-      {areas.map((area, i) => {
-        const p = getPoint(i, labelRadius);
-        const isSelected = selectedArea === area.slug;
-        return (
-          <React.Fragment key={`label-${i}`}>
-            <Circle
-              cx={p.x}
-              cy={p.y}
-              r={16}
-              fill="transparent"
-              onPress={() => onSelectArea && onSelectArea(area.slug)}
-            />
-            <SvgText
-              x={p.x}
-              y={p.y}
-              textAnchor="middle"
-              alignmentBaseline="middle"
-              fontSize={8}
-              fill={area.color || '#a78bfa'}
-              fillOpacity={isSelected ? 1 : area.vibrancy}
-              fontFamily="DMSans_500Medium"
-              fontWeight={isSelected ? 'bold' : 'normal'}>
-              {(area.name || '').toUpperCase()}
-            </SvgText>
-          </React.Fragment>
-        );
-      })}
-
-      {/* Center */}
-      <Circle cx={cx} cy={cy} r={3} fill="#a78bfa" fillOpacity={0.4} />
-    </Svg>
+function HeroStatCard({ emoji, value, label }) {
+  return (
+    <LinearGradient
+      colors={CARD_GRADIENT}
+      locations={CARD_GRADIENT_LOCATIONS}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 0.35, y: 1 }}
+      style={styles.heroCard}>
+      {emoji ? <Text style={styles.heroEmoji}>{emoji}</Text> : null}
+      <Text style={styles.heroValue}>{value}</Text>
+      <Text style={styles.heroLabel}>{label}</Text>
+    </LinearGradient>
   );
 }
 
@@ -531,7 +410,7 @@ function WhoIAmRow({ row }) {
 }
 
 export default function InsightsScreen() {
-  const { openLegacy, openSettings } = useAppNavigation();
+  const { openSettings } = useAppNavigation();
   const screenWidth = Dimensions.get('window').width;
   const squareSize = Math.floor((screenWidth - 120) / 7) - 4;
   const squareGap = 2;
@@ -554,7 +433,6 @@ export default function InsightsScreen() {
   const [userAreas, setUserAreas] = useState([]);
   const [userIdentities, setUserIdentities] = useState([]);
   const [activeGoals, setActiveGoals] = useState([]);
-  const [journalEntries, setJournalEntries] = useState([]);
   const [selectedArea, setSelectedArea] = useState(null);
   const [selectedDays, setSelectedDays] = useState(30);
   const [weekInsight, setWeekInsight] = useState(null);
@@ -566,9 +444,30 @@ export default function InsightsScreen() {
     setInsightLoading(true);
     setInsightFailed(false);
     try {
-      const sevenDayKeys = new Set(getLastNDayKeys(todayKey, 7));
+      const sevenDayKeysList = getLastNDayKeys(todayKey, 7);
+      const sevenDayKeys = new Set(sevenDayKeysList);
+      const windowStart = sevenDayKeysList[sevenDayKeysList.length - 1];
       const thirtyDayKeys = new Set(getLastNDayKeys(todayKey, 30));
       const habitsById = new Map(habits.map((h) => [h.id, h]));
+
+      const { data: authData } = await supabase.auth.getUser();
+      const uid = authData?.user?.id;
+
+      let generalNotesInWindow = [];
+      if (uid) {
+        const { data: noteData } = await supabase
+          .from('general_notes')
+          .select('created_at')
+          .eq('user_id', uid)
+          .gte('created_at', `${windowStart}T00:00:00`);
+        generalNotesInWindow = noteData ?? [];
+      }
+
+      const daysWithActivity = countLoggingDaysInWindow(
+        completions,
+        generalNotesInWindow,
+        sevenDayKeysList
+      );
 
       const recentCompletions = completions
         .filter((c) => sevenDayKeys.has(String(c.completed_date).slice(0, 10)))
@@ -576,16 +475,6 @@ export default function InsightsScreen() {
           date: String(c.completed_date).slice(0, 10),
           habit_id: c.habit_id,
           area: habitsById.get(c.habit_id)?.area ?? null,
-        }));
-
-      const recentEntries = journalEntries
-        .filter((e) => sevenDayKeys.has(String(e.entry_date).slice(0, 10)))
-        .map((e) => ({
-          date: e.entry_date,
-          morning_note: e.morning_note ?? null,
-          evening_note: e.evening_note ?? null,
-          win_of_day: e.win_of_day ?? null,
-          reflection_answer: e.reflection_answer ?? null,
         }));
 
       const areaCompletionCounts = {};
@@ -597,16 +486,13 @@ export default function InsightsScreen() {
         areaCompletionCounts[area] = (areaCompletionCounts[area] || 0) + 1;
       }
 
-      const identities = userIdentities.map((i) => ({
-        area: i.area_slug ?? i.area,
-        statement: i.statement,
-      }));
-
       const userData = JSON.stringify(
         {
+          logging_consistency: {
+            days_with_activity: daysWithActivity,
+            window_days: 7,
+          },
           habit_completions_last_7_days: recentCompletions,
-          daily_entries_last_7_days: recentEntries,
-          user_identities: identities,
           area_completion_counts_last_30_days: areaCompletionCounts,
         },
         null,
@@ -635,7 +521,7 @@ export default function InsightsScreen() {
     } finally {
       setInsightLoading(false);
     }
-  }, [completions, journalEntries, userIdentities, habits, todayKey]);
+  }, [completions, habits, todayKey]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -647,7 +533,6 @@ export default function InsightsScreen() {
       setUserAreas([]);
       setUserIdentities([]);
       setActiveGoals([]);
-      setJournalEntries([]);
       setLoading(false);
       return;
     }
@@ -660,7 +545,6 @@ export default function InsightsScreen() {
       { data: areasData },
       { data: identitiesData },
       { data: goalsData },
-      { data: journalData },
     ] = await Promise.all([
       supabase
         .from('habits')
@@ -683,12 +567,6 @@ export default function InsightsScreen() {
         .select('*')
         .eq('user_id', uid)
         .eq('status', 'active'),
-      supabase
-        .from('daily_entries')
-        .select('*')
-        .eq('user_id', uid)
-        .gte('entry_date', since730)
-        .lte('entry_date', todayKey),
     ]);
 
     setHabits(habitsData ?? []);
@@ -696,7 +574,6 @@ export default function InsightsScreen() {
     setUserAreas(areasData ?? []);
     setUserIdentities(identitiesData ?? []);
     setActiveGoals(goalsData ?? []);
-    setJournalEntries(journalData ?? []);
     setLoading(false);
   }, [todayKey]);
 
@@ -838,63 +715,61 @@ export default function InsightsScreen() {
   }, [userAreas, habits, completions, rangeKeys]);
 
   const lifeWheelAreas = useMemo(() => {
-    const areas = userAreas.length > 0
-      ? userAreas
-      : [...new Set(habits.map(h => (h.area || 'general').toLowerCase()))].map(
-          area => ({ slug: area, name: area, color: '#a78bfa' })
-        );
+    const areas =
+      userAreas.length > 0
+        ? userAreas
+        : [...new Set(habits.map((h) => (h.area || 'general').toLowerCase()))].map(
+            (slug) => ({ slug, name: slug, color: getAreaColor(slug) })
+          );
 
     const today = new Date();
 
-    return areas.slice(0, 8).map(ua => {
-      const slug = ua.slug || ua.area || '';
-
-      // Layer 1 — identity exists
-      const hasIdentity = userIdentities.some(i => i.area_slug === slug);
-
-      // Layer 2 — at least one active commitment
-      const areaHabits = habits.filter(h => (h.area || '').toLowerCase() === slug.toLowerCase());
+    return areas.slice(0, 8).map((ua) => {
+      const slug = (ua.slug || ua.area || '').toLowerCase();
+      const hasIdentity = userIdentities.some(
+        (i) => (i.area_slug || i.area || '').toLowerCase() === slug
+      );
+      const areaHabits = habits.filter((h) => (h.area || '').toLowerCase() === slug);
       const hasCommitment = areaHabits.length > 0;
 
-      // Layer 3 — active pursuit (bonus)
-      const hasPursuit = activeGoals.some(g => (g.area || '').toLowerCase() === slug.toLowerCase());
-
-      // Spoke length ratio: 0, 0.5, or 1.0
       let spokeLengthRatio = 0;
       if (hasIdentity && hasCommitment) spokeLengthRatio = 1.0;
       else if (hasIdentity) spokeLengthRatio = 0.5;
 
-      // Vibrancy — based on most recent habit completion in this area
-      const habitIds = areaHabits.map(h => h.id);
-      const areaCompletions = completions.filter(c => habitIds.includes(c.habit_id));
-      let daysSinceActive = 999;
-      if (areaCompletions.length > 0) {
-        const mostRecent = areaCompletions.reduce((latest, c) => {
-          return c.completed_date > latest ? c.completed_date : latest;
-        }, '');
-        const diff = (today - new Date(mostRecent)) / (1000 * 60 * 60 * 24);
-        daysSinceActive = diff;
+      const habitIds = new Set(areaHabits.map((h) => h.id));
+      let mostRecent = null;
+      for (const c of completions) {
+        if (habitIds.has(c.habit_id)) {
+          const d = String(c.completed_date).slice(0, 10);
+          if (!mostRecent || d > mostRecent) mostRecent = d;
+        }
       }
 
-      let vibrancy;
-      if (daysSinceActive <= 30) vibrancy = 1.0;
-      else if (daysSinceActive <= 60) vibrancy = 0.5;
-      else vibrancy = 0.2;
+      let vibrancy = hasIdentity ? 0.4 : 0.15;
+      if (mostRecent) {
+        const diff =
+          (today - new Date(`${mostRecent}T12:00:00`)) / (1000 * 60 * 60 * 24);
+        if (diff <= 30) vibrancy = 1.0;
+        else if (diff <= 60) vibrancy = 0.5;
+        else vibrancy = 0.2;
+      }
 
-      // If no commitments at all, use identity presence for vibrancy
-      if (areaHabits.length === 0) vibrancy = hasIdentity ? 0.4 : 0.15;
+      const identityRow = userIdentities.find(
+        (i) => (i.area_slug || i.area || '').toLowerCase() === slug
+      );
 
       return {
-        ...ua,
         slug,
-        hasIdentity,
-        hasCommitment,
-        hasPursuit,
+        name: ua.name || ua.display_name || slug,
+        color: ua.color || getAreaColor(slug),
         spokeLengthRatio,
         vibrancy,
+        identityStatement: identityRow?.statement
+          ? `I am someone who ${identityRow.statement}`
+          : null,
       };
     });
-  }, [userAreas, userIdentities, habits, activeGoals, completions]);
+  }, [userAreas, userIdentities, habits, completions]);
 
   const lifeWheelAreasCovered = useMemo(() => {
     const total = lifeWheelAreas.length;
@@ -1039,62 +914,6 @@ export default function InsightsScreen() {
     return { currentAvg, previousAvg, delta };
   }, [habits, completions, rangeKeys, previousRangeKeys, todayKey]);
 
-  const journalPatterns = useMemo(() => {
-    const entryByDate = new Map();
-    for (const entry of journalEntries) {
-      const key = String(entry.entry_date).slice(0, 10);
-      entryByDate.set(key, entry);
-    }
-
-    const totalDays = rangeKeys.length;
-    let journaledDays = 0;
-    let morningDays = 0;
-    let eveningDays = 0;
-    let bothDays = 0;
-    let neitherDays = 0;
-
-    for (const key of rangeKeys) {
-      const entry = entryByDate.get(key);
-      const hasMorning = Boolean(entry?.journal_note?.trim());
-      const hasEvening = Boolean(entry?.evening_note?.trim());
-
-      if (hasMorning) morningDays += 1;
-      if (hasEvening) eveningDays += 1;
-      if (hasMorning && hasEvening) bothDays += 1;
-      if (!hasMorning && !hasEvening) neitherDays += 1;
-      if (hasMorning || hasEvening) journaledDays += 1;
-    }
-
-    const journaledPct =
-      totalDays === 0 ? 0 : Math.round((journaledDays / totalDays) * 100);
-
-    let observation = '';
-    if (journaledDays === 0) {
-      observation =
-        "The more you reflect, the more you'll see about yourself.";
-    } else if (journaledPct < 30) {
-      observation =
-        'Keep reflecting — patterns will emerge as you show up in your Journal.';
-    } else if (journaledPct <= 70) {
-      observation =
-        "You're building a reflection practice — keep going";
-    } else {
-      observation =
-        'You reflect consistently. Your Journal is revealing who you are.';
-    }
-
-    return {
-      totalDays,
-      journaledDays,
-      journaledPct,
-      morningDays,
-      eveningDays,
-      bothDays,
-      neitherDays,
-      observation,
-    };
-  }, [journalEntries, rangeKeys]);
-
   const handleSelectArea = useCallback((key) => {
     setSelectedArea(key);
     const rowY = areaRowOffsets.current[key] ?? 0;
@@ -1131,6 +950,29 @@ export default function InsightsScreen() {
           }}>
           Insights
         </Text>
+
+        {!insightFailed && (insightLoading || weekInsight) ? (
+          <InsightGradientCard>
+            <Text style={styles.insightCardTitle}>YOUR INSIGHT</Text>
+            {insightLoading ? (
+              <Text style={styles.insightLoadingText}>
+                Reflecting on your week...
+              </Text>
+            ) : (
+              <>
+                <Text style={styles.insightText}>{weekInsight}</Text>
+                <TouchableOpacity
+                  onPress={fetchWeekInsight}
+                  activeOpacity={0.7}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Text style={styles.insightRefreshText}>
+                    refresh insight ↺
+                  </Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </InsightGradientCard>
+        ) : null}
 
         <View style={styles.timeframeRow}>
           {TIMEFRAME_OPTIONS.map((option, index) => {
@@ -1194,11 +1036,7 @@ export default function InsightsScreen() {
               <Text style={styles.lifeWheelQuestion}>
                 Am I being intentional across all areas of my life?
               </Text>
-              <LifeWheel
-                areas={lifeWheelAreas}
-                selectedArea={selectedArea}
-                onSelectArea={setSelectedArea}
-              />
+              <LifeWheelCompact areas={lifeWheelAreas} />
               <Text style={styles.lifeWheelLegend}>
                 Spoke length = presence · Brightness = activity
               </Text>
@@ -1242,7 +1080,7 @@ export default function InsightsScreen() {
               />
             </View>
 
-            <View style={styles.card}>
+            <GradientCard>
               <SectionTitle>CONSISTENCY</SectionTitle>
               <Text style={styles.sectionSubtitle}>{timeframeHeatmapLabel}</Text>
 
@@ -1306,9 +1144,9 @@ export default function InsightsScreen() {
                   ))}
                 </ScrollView>
               </View>
-            </View>
+            </GradientCard>
 
-            <View style={styles.card}>
+            <GradientCard>
               <SectionTitle>MOST CONSISTENT</SectionTitle>
               <Text style={styles.sectionSubtitle}>
                 Where you keep showing up
@@ -1336,10 +1174,9 @@ export default function InsightsScreen() {
                   </View>
                 ))
               )}
-            </View>
+            </GradientCard>
 
-            <View
-              style={styles.card}
+            <GradientCard
               onLayout={(e) => {
                 byAreaSectionY.current = e.nativeEvent.layout.y;
               }}>
@@ -1380,9 +1217,9 @@ export default function InsightsScreen() {
                   </View>
                 ))
               )}
-            </View>
+            </GradientCard>
 
-            <View style={styles.card}>
+            <GradientCard>
               <SectionTitle>BY DAY OF WEEK</SectionTitle>
               <Text style={styles.sectionSubtitle}>
                 When you most show up
@@ -1421,9 +1258,9 @@ export default function InsightsScreen() {
                   ) : null}
                 </>
               )}
-            </View>
+            </GradientCard>
 
-            <View style={styles.card}>
+            <GradientCard>
               <SectionTitle>THIS PERIOD VS PREVIOUS</SectionTitle>
               <Text style={styles.sectionSubtitle}>
                 How your practice is evolving
@@ -1466,79 +1303,9 @@ export default function InsightsScreen() {
                   ) : null}
                 </>
               )}
-            </View>
-
-            <View style={styles.card}>
-              <SectionTitle>PATTERNS FROM YOUR JOURNAL</SectionTitle>
-              <Text style={styles.sectionSubtitle}>
-                Patterns in your reflection
-              </Text>
-              {journalPatterns.journaledDays === 0 ? (
-                <>
-                  <Text style={styles.journalCount}>
-                    0 of {journalPatterns.totalDays} days journaled
-                  </Text>
-                  <View style={styles.journalBarTrack}>
-                    <View
-                      style={[styles.journalBarFill, { width: '0%' }]}
-                    />
-                  </View>
-                  <Text style={styles.journalObservation}>
-                    The more you reflect, the more you&apos;ll see about
-                    yourself.
-                  </Text>
-                </>
-              ) : (
-                <>
-                  <Text style={styles.journalCount}>
-                    {journalPatterns.journaledDays} of{' '}
-                    {journalPatterns.totalDays} days journaled
-                  </Text>
-                  <View style={styles.journalBarTrack}>
-                    <View
-                      style={[
-                        styles.journalBarFill,
-                        { width: `${journalPatterns.journaledPct}%` },
-                      ]}
-                    />
-                  </View>
-                  <Text style={styles.journalObservation}>
-                    {journalPatterns.observation}
-                  </Text>
-                </>
-              )}
-            </View>
-
-            <TouchableOpacity
-              style={styles.journeyBtn}
-              onPress={openLegacy}>
-              <Text style={styles.journeyBtnText}>Your Journey →</Text>
-            </TouchableOpacity>
+            </GradientCard>
           </>
         )}
-
-        {!insightFailed && (insightLoading || weekInsight) ? (
-          <View style={styles.insightCard}>
-            <Text style={styles.insightCardTitle}>YOUR INSIGHT</Text>
-            {insightLoading ? (
-              <Text style={styles.insightLoadingText}>
-                Reflecting on your week...
-              </Text>
-            ) : (
-              <>
-                <Text style={styles.insightText}>{weekInsight}</Text>
-                <TouchableOpacity
-                  onPress={fetchWeekInsight}
-                  activeOpacity={0.7}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                  <Text style={styles.insightRefreshText}>
-                    refresh insight ↺
-                  </Text>
-                </TouchableOpacity>
-              </>
-            )}
-          </View>
-        ) : null}
       </ScrollView>
     </SafeAreaView>
   );
@@ -1561,27 +1328,44 @@ const styles = StyleSheet.create({
     fontWeight: '300',
     color: COLORS.text,
     marginTop: 8,
-    marginBottom: 16,
+    marginBottom: 12,
   },
   loaderWrap: {
     paddingVertical: 48,
     alignItems: 'center',
   },
-  insightCard: {
-    backgroundColor: '#1a1625',
-    borderRadius: 16,
+  insightCardShell: {
+    marginBottom: 12,
+    borderRadius: CARD_RADIUS,
+  },
+  insightCardGlow: {
+    position: 'absolute',
+    top: 8,
+    left: 6,
+    right: 6,
+    bottom: -4,
+    borderRadius: CARD_RADIUS + 4,
+    backgroundColor: 'rgba(167, 139, 250, 0.1)',
+    shadowColor: '#a78bfa',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.4,
+    shadowRadius: 24,
+    elevation: 12,
+  },
+  insightCardGradient: {
+    borderRadius: CARD_RADIUS,
     padding: 20,
-    marginBottom: 16,
-    borderLeftWidth: 3,
-    borderLeftColor: '#a78bfa',
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(167, 139, 250, 0.18)',
   },
   insightCardTitle: {
     fontSize: 9,
     fontFamily: FONTS.bodyMedium,
     textTransform: 'uppercase',
-    color: '#a78bfa',
+    color: COLORS.accent,
     letterSpacing: 2,
-    marginBottom: 12,
+    marginBottom: 10,
   },
   insightLoadingText: {
     fontSize: 15,
@@ -1606,8 +1390,8 @@ const styles = StyleSheet.create({
   timeframeRow: {
     flexDirection: 'row',
     paddingHorizontal: 20,
-    marginTop: 12,
-    marginBottom: 4,
+    marginTop: 8,
+    marginBottom: 2,
   },
   timeframePill: {
     backgroundColor: COLORS.surface,
@@ -1634,13 +1418,13 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     paddingVertical: 16,
     paddingHorizontal: 20,
-    marginBottom: 16,
+    marginBottom: 12,
     alignItems: 'center',
   },
   lifeWheelTitle: {
     fontSize: 9,
-    letterSpacing: 1.5,
-    color: COLORS.accent,
+    letterSpacing: 2,
+    color: COLORS.muted,
     textTransform: 'uppercase',
     alignSelf: 'flex-start',
     fontFamily: FONTS.bodyMedium,
@@ -1683,7 +1467,7 @@ const styles = StyleSheet.create({
     paddingVertical: 24,
   },
   whoIAmSection: {
-    marginBottom: 16,
+    marginBottom: 12,
     alignSelf: 'stretch',
   },
   identityRow: {
@@ -1742,21 +1526,21 @@ const styles = StyleSheet.create({
     color: COLORS.accent,
     fontWeight: '500',
   },
-  journeyBtn: { marginHorizontal: 20, marginTop: 24, marginBottom: 8, padding: 16, backgroundColor: COLORS.surface, borderRadius: 14, borderWidth: 1, borderColor: COLORS.border, alignItems: 'center' },
-  journeyBtnText: { color: COLORS.accent, fontFamily: FONTS.bodyMedium, fontSize: 15 },
   heroRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 16,
+    marginBottom: 12,
     marginHorizontal: -4,
   },
   heroCard: {
     flex: 1,
-    backgroundColor: COLORS.surface,
-    borderRadius: 16,
+    borderRadius: CARD_RADIUS,
     padding: 16,
     marginHorizontal: 4,
     alignItems: 'center',
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(167, 139, 250, 0.08)',
   },
   heroEmoji: {
     fontSize: 20,
@@ -1764,7 +1548,7 @@ const styles = StyleSheet.create({
   },
   heroValue: {
     fontSize: 28,
-    fontWeight: '600',
+    fontFamily: PLAYFAIR,
     color: COLORS.accent,
     textAlign: 'center',
   },
@@ -1773,17 +1557,23 @@ const styles = StyleSheet.create({
     color: COLORS.mutedLight,
     textAlign: 'center',
     marginTop: 4,
+    fontFamily: FONTS.body,
   },
-  card: {
-    backgroundColor: COLORS.surface,
-    borderRadius: 20,
+  gradientCardShell: {
+    marginBottom: 12,
+    borderRadius: CARD_RADIUS,
+  },
+  gradientCard: {
+    borderRadius: CARD_RADIUS,
     padding: 16,
-    marginBottom: 16,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(167, 139, 250, 0.08)',
   },
   sectionTitle: {
     fontSize: 9,
-    letterSpacing: 1.5,
-    color: COLORS.accent,
+    letterSpacing: 2,
+    color: COLORS.muted,
     textTransform: 'uppercase',
     fontFamily: FONTS.bodyMedium,
   },
@@ -1791,7 +1581,8 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: COLORS.muted,
     marginTop: 4,
-    marginBottom: 12,
+    marginBottom: 10,
+    fontFamily: FONTS.body,
   },
   heatmapWrap: {
     width: '100%',
@@ -1807,7 +1598,7 @@ const styles = StyleSheet.create({
     marginRight: GAP,
   },
   heatmapSquare: {
-    borderRadius: 3,
+    borderRadius: 4,
     marginHorizontal: 0,
     marginVertical: 1,
   },
@@ -1836,9 +1627,9 @@ const styles = StyleSheet.create({
   },
   commitmentMeta: {
     color: COLORS.accent,
-    fontSize: 13,
+    fontSize: 14,
     marginTop: 2,
-    fontWeight: '500',
+    fontFamily: PLAYFAIR,
   },
   commitmentStreak: {
     color: COLORS.mutedLight,
@@ -1883,12 +1674,12 @@ const styles = StyleSheet.create({
   },
   areaRate: {
     color: COLORS.mutedLight,
-    fontSize: 13,
-    fontWeight: '600',
+    fontSize: 14,
+    fontFamily: PLAYFAIR,
   },
   areaBarTrack: {
     height: 6,
-    backgroundColor: COLORS.surface,
+    backgroundColor: 'rgba(167, 139, 250, 0.12)',
     borderRadius: 3,
     overflow: 'hidden',
   },
@@ -1912,6 +1703,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: COLORS.mutedLight,
     marginBottom: 6,
+    fontFamily: PLAYFAIR,
   },
   dowBarTrack: {
     height: 120,
@@ -1920,7 +1712,7 @@ const styles = StyleSheet.create({
   },
   dowBarFill: {
     width: 32,
-    backgroundColor: COLORS.accent,
+    backgroundColor: 'rgba(167, 139, 250, 0.55)',
     borderRadius: 4,
   },
   dowLabel: {
@@ -1950,12 +1742,12 @@ const styles = StyleSheet.create({
   },
   periodBig: {
     fontSize: 36,
-    fontWeight: '600',
+    fontFamily: PLAYFAIR,
     color: COLORS.accent,
   },
   periodDelta: {
     fontSize: 16,
-    fontWeight: '600',
+    fontFamily: PLAYFAIR,
     textAlign: 'center',
   },
   periodEmpty: {
@@ -1964,28 +1756,6 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     marginTop: 8,
     lineHeight: 22,
-  },
-  journalCount: {
-    fontSize: 14,
-    color: COLORS.mutedLight,
-    marginBottom: 10,
-  },
-  journalBarTrack: {
-    height: 8,
-    backgroundColor: COLORS.surface,
-    borderRadius: 4,
-    overflow: 'hidden',
-    marginBottom: 12,
-  },
-  journalBarFill: {
-    height: '100%',
-    backgroundColor: COLORS.accent,
-    borderRadius: 4,
-  },
-  journalObservation: {
-    fontSize: 13,
-    color: COLORS.muted,
-    lineHeight: 20,
   },
   legacyLink: {
     marginTop: 8,

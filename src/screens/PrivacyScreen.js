@@ -9,7 +9,7 @@ export default function PrivacyScreen({ navigation }) {
       <Text style={styles.meta}>Last updated May 2026</Text>
 
       <Text style={styles.heading}>What we collect</Text>
-      <Text style={styles.body}>• Email address for login{'\n'}• Journal notes and evening reflections{'\n'}• Mood, energy, and focus scores{'\n'}• Sleep hours and daily focus intention{'\n'}• Win of the day entries{'\n'}• Habit completion records{'\n'}• Identity statements and life areas{'\n'}• Project and action data</Text>
+      <Text style={styles.body}>• Email address for login{'\n'}• Daily reflections and evening notes{'\n'}• Mood, energy, and focus scores{'\n'}• Sleep hours and daily focus intention{'\n'}• Win of the day entries{'\n'}• Habit completion records{'\n'}• Identity statements and life areas{'\n'}• Project and action data</Text>
 
       <Text style={styles.heading}>How we use it</Text>
       <Text style={styles.body}>• To provide and operate Meridian{'\n'}• To generate AI insights via Anthropic's API{'\n'}• To calculate your Life Wheel and streaks{'\n'}• To process payments via Stripe{'\n'}• We never sell your data</Text>

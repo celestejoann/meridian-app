@@ -45,11 +45,16 @@ function getLabelFillOpacity(vibrancy, selected) {
   return selected ? Math.min(base + 0.2, 1) : base;
 }
 
-export default function LifeWheelCompact({ areas }) {
+export default function LifeWheelCompact({
+  areas,
+  chartWidth: chartWidthProp,
+  enableHint = true,
+  interactive = true,
+}) {
   const [selectedIndex, setSelectedIndex] = useState(null);
   const [showHint, setShowHint] = useState(false);
   const hintOpacity = useState(() => new Animated.Value(0))[0];
-  const chartWidth = Dimensions.get('window').width - 48;
+  const chartWidth = chartWidthProp ?? Dimensions.get('window').width - 48;
   const maxRadius = chartWidth * MAX_RADIUS_RATIO;
   const totalAreas = areas.length;
 
@@ -67,6 +72,7 @@ export default function LifeWheelCompact({ areas }) {
   }, [showHint, hintOpacity]);
 
   useEffect(() => {
+    if (!enableHint) return undefined;
     let mounted = true;
     AsyncStorage.getItem(HINT_STORAGE_KEY).then((value) => {
       if (mounted && !value) {
@@ -76,7 +82,7 @@ export default function LifeWheelCompact({ areas }) {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [enableHint]);
 
   useEffect(() => {
     if (!showHint) return undefined;
@@ -281,7 +287,8 @@ export default function LifeWheelCompact({ areas }) {
           <Circle cx={cx} cy={cy} r={2.5} fill="#a78bfa" fillOpacity={0.35} />
         </Svg>
 
-        {areas.map((area, i) => {
+        {interactive
+          ? areas.map((area, i) => {
           const labelPoint = getPoint(i, labelRadius);
           const hitCenterX = marginLeft + labelPoint.x;
           const hitCenterY = labelPoint.y;
@@ -302,9 +309,10 @@ export default function LifeWheelCompact({ areas }) {
               accessibilityHint="Shows identity statement"
             />
           );
-        })}
+        })
+          : null}
 
-        {activeArea && tooltipAnchor ? (
+        {interactive && activeArea && tooltipAnchor ? (
           <View
             pointerEvents="none"
             style={[
@@ -326,7 +334,7 @@ export default function LifeWheelCompact({ areas }) {
         ) : null}
       </View>
 
-      {showHint ? (
+      {enableHint && showHint ? (
         <Animated.Text style={[styles.hintText, { opacity: hintOpacity }]}>
           Tap a label to see who you are
         </Animated.Text>

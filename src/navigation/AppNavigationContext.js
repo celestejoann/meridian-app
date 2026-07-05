@@ -5,6 +5,8 @@ export const AppNavigationContext = createContext({
   openInsights: () => {},
   openSettings: () => {},
   openDashboard: () => {},
+  openCheckIn: () => {},
+  openMyLife: () => {},
 });
 
 export function useAppNavigation() {

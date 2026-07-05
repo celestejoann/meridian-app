@@ -19,6 +19,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
 import { scheduleDailyNotifications, cancelAllNotifications } from '../lib/notifications';
 import { COLORS, FONTS } from '../constants/theme';
+import { useAppNavigation } from '../navigation/AppNavigationContext';
 
 function memberSinceLabel(createdAt) {
   if (!createdAt) return '';
@@ -51,6 +52,7 @@ function SettingsCard({ children }) {
 }
 
 export default function SettingsScreen() {
+  const { openMyLife } = useAppNavigation();
   const [loading, setLoading] = useState(true);
   const [email, setEmail] = useState('');
   const [memberSince, setMemberSince] = useState('');
@@ -143,6 +145,15 @@ export default function SettingsScreen() {
                 </Text>
               ) : null}
             </View>
+
+            <SectionLabel>MY LIFE</SectionLabel>
+            <SettingsCard>
+              <SettingsRow
+                label="My Life"
+                onPress={openMyLife}
+                isLast
+              />
+            </SettingsCard>
 
             <SectionLabel>YOUR ACCOUNT</SectionLabel>
             <SettingsCard>

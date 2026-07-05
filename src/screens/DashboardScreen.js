@@ -17,6 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { COLORS, FONTS, AREA_COLORS } from '../constants/theme';
 import { supabase } from '../lib/supabase';
 import { calculateLoggingStreak, getStreakMilestone } from '../lib/streak';
+import { useAppNavigation } from '../navigation/AppNavigationContext';
 import LifeWheelCompact from '../components/LifeWheelCompact';
 import Svg, { Polygon } from 'react-native-svg';
 
@@ -309,6 +310,7 @@ function HabitRow({
 
 export default function DashboardScreen() {
   const insets = useSafeAreaInsets();
+  const { openCheckIn, openMyLife } = useAppNavigation();
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState(null);
   const [habits, setHabits] = useState([]);
@@ -324,8 +326,6 @@ export default function DashboardScreen() {
   const [showMilestoneCelebration, setShowMilestoneCelebration] = useState(false);
   const [toggleBusyId, setToggleBusyId] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [tasksDueToday, setTasksDueToday] = useState([]);
-  const [tasksDueThisWeek, setTasksDueThisWeek] = useState([]);
   const [showGraceCard, setShowGraceCard] = useState(false);
   const confirmationSlide = useRef(new Animated.Value(120)).current;
   const confirmationTimerRef = useRef(null);
@@ -531,9 +531,6 @@ export default function DashboardScreen() {
 
     const todayStr = formatLocalDateKey(new Date());
     const mondayStr = getMondayKey(new Date());
-    const sundayDate = new Date();
-    sundayDate.setDate(sundayDate.getDate() + (7 - sundayDate.getDay()));
-    const sundayStr = sundayDate.toLocaleDateString('en-CA');
 
     const [
       { data: habitsData, error: habitsErr },
@@ -541,7 +538,6 @@ export default function DashboardScreen() {
       { data: weekRows },
       { data: areasData },
       { data: identitiesData },
-      { data: tasksData },
     ] = await Promise.all([
       supabase
         .from('habits')
@@ -562,14 +558,6 @@ export default function DashboardScreen() {
         .lte('completed_date', todayStr),
       supabase.from('user_areas').select('*').eq('user_id', uid),
       supabase.from('user_identities').select('*').eq('user_id', uid),
-      supabase
-        .from('tasks')
-        .select('*, goals(title, area)')
-        .eq('user_id', uid)
-        .neq('status', 'completed')
-        .not('due_date', 'is', null)
-        .lte('due_date', sundayStr)
-        .order('due_date', { ascending: true }),
     ]);
 
     if (habitsErr) {
@@ -595,10 +583,6 @@ export default function DashboardScreen() {
       }
     }
     setIdentityMap(idMap);
-
-    const allTasks = tasksData || [];
-    setTasksDueToday(allTasks.filter(t => t.due_date <= todayStr));
-    setTasksDueThisWeek(allTasks.filter(t => t.due_date > todayStr));
 
     await recalcStreak(uid);
     setLoading(false);
@@ -795,14 +779,6 @@ export default function DashboardScreen() {
     setCompletion(habitId, true, 'life_happens');
   };
 
-  const toggleTask = async (taskId) => {
-    const { error } = await supabase
-      .from('tasks')
-      .update({ status: 'completed' })
-      .eq('id', taskId);
-    if (!error) await load();
-  };
-
   return (
     <SafeAreaView style={styles.safe} edges={['left', 'right']}>
       <ScrollView
@@ -849,9 +825,17 @@ export default function DashboardScreen() {
         ) : (
           <>
             {isTodayLogged ? (
-              <Text style={styles.loggedStatusLine}>
-                Today&apos;s evidence: logged ✓
-              </Text>
+              <TouchableOpacity
+                style={styles.loggedStatusCard}
+                onPress={openCheckIn}
+                activeOpacity={0.85}
+                accessibilityRole="button"
+                accessibilityLabel="Today's evidence logged. Tap to reopen check in.">
+                <Text style={styles.loggedStatusText}>
+                  Today&apos;s evidence: logged ✓
+                </Text>
+                <Text style={styles.loggedStatusHint}>Tap to revisit today&apos;s check-in</Text>
+              </TouchableOpacity>
             ) : null}
 
             <View
@@ -940,76 +924,22 @@ export default function DashboardScreen() {
                   </>
                 )}
               </Card>
-
-              {(tasksDueToday.length > 0 || tasksDueThisWeek.length > 0) ? (
-                <Card>
-                  <Text style={[styles.playfairSectionHeading, styles.playfairSectionHeadingFont]}>
-                    Actions
-                  </Text>
-
-                  {tasksDueToday.length > 0 && (
-                    <>
-                      <Text style={styles.sectionTitle}>DUE TODAY</Text>
-                      {tasksDueToday.map(task => {
-                        const areaKey = (task.goals?.area || '').toLowerCase();
-                        const areaColor = AREA_COLORS[areaKey] || COLORS.accent;
-                        return (
-                          <TouchableOpacity
-                            key={task.id}
-                            style={styles.actionRow}
-                            onPress={() => toggleTask(task.id)}>
-                            <View style={[styles.actionCheck, { borderColor: areaColor }]}>
-                              <View style={[styles.actionCheckInner, { backgroundColor: areaColor }]} />
-                            </View>
-                            <View style={styles.actionContent}>
-                              <Text style={styles.actionTitle}>{task.title}</Text>
-                              <Text style={[styles.actionMeta, { color: areaColor }]}>
-                                {task.goals?.title || 'Pursuit'}
-                              </Text>
-                            </View>
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </>
-                  )}
-
-                  {tasksDueThisWeek.length > 0 && (
-                    <>
-                      {tasksDueToday.length > 0 && <View style={styles.sectionDivider} />}
-                      <Text style={styles.sectionTitle}>THIS WEEK</Text>
-                      {tasksDueThisWeek.map(task => {
-                        const areaKey = (task.goals?.area || '').toLowerCase();
-                        const areaColor = AREA_COLORS[areaKey] || COLORS.accent;
-                        const dueDate = new Date(task.due_date + 'T00:00:00');
-                        const dueDateLabel = dueDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-                        return (
-                          <TouchableOpacity
-                            key={task.id}
-                            style={styles.actionRow}
-                            onPress={() => toggleTask(task.id)}>
-                            <View style={[styles.actionCheck, { borderColor: areaColor }]} />
-                            <View style={styles.actionContent}>
-                              <Text style={styles.actionTitle}>{task.title}</Text>
-                              <Text style={[styles.actionMeta, { color: areaColor }]}>
-                                {task.goals?.title || 'Pursuit'} · Due {dueDateLabel}
-                              </Text>
-                            </View>
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </>
-                  )}
-                </Card>
-              ) : (
-                <Card>
-                  <Text style={[styles.playfairSectionHeading, styles.playfairSectionHeadingFont]}>
-                    Actions
-                  </Text>
-                  <Text style={styles.emptyText}>No actions due this week.</Text>
-                  <Text style={styles.emptySubtext}>Add milestones to your pursuits to see them here.</Text>
-                </Card>
-              )}
             </View>
+
+            <TouchableOpacity
+              style={styles.myLifeLink}
+              onPress={openMyLife}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel="Open My Life">
+              <View style={styles.myLifeLinkTextCol}>
+                <Text style={styles.myLifeLinkTitle}>My Life</Text>
+                <Text style={styles.myLifeLinkSubtext}>
+                  Areas · Identity · Commitments
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={COLORS.mutedLight} />
+            </TouchableOpacity>
           </>
         )}
       </ScrollView>
@@ -1118,13 +1048,56 @@ const styles = StyleSheet.create({
     marginTop: 8,
     opacity: 0.92,
   },
-  loggedStatusLine: {
+  loggedStatusCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    marginBottom: 12,
+    alignItems: 'center',
+  },
+  loggedStatusText: {
     fontSize: 14,
     color: COLORS.mutedLight,
     fontFamily: FONTS.body,
     fontStyle: 'italic',
     textAlign: 'center',
-    marginBottom: 8,
+  },
+  loggedStatusHint: {
+    fontSize: 12,
+    color: COLORS.muted,
+    fontFamily: FONTS.body,
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  myLifeLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: COLORS.surface,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+    paddingVertical: 16,
+    paddingHorizontal: 18,
+    marginBottom: 20,
+  },
+  myLifeLinkTextCol: {
+    flex: 1,
+    paddingRight: 12,
+  },
+  myLifeLinkTitle: {
+    fontSize: 17,
+    fontFamily: FONTS.bodyMedium,
+    color: COLORS.text,
+    marginBottom: 2,
+  },
+  myLifeLinkSubtext: {
+    fontSize: 13,
+    fontFamily: FONTS.body,
+    color: COLORS.mutedLight,
   },
   streakLineWrap: {
     alignItems: 'center',

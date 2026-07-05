@@ -8,6 +8,8 @@ import IdentityManagementScreen from '../screens/IdentityManagementScreen';
 import AreasManagementScreen from '../screens/AreasManagementScreen';
 import NewPursuitScreen from '../screens/NewPursuitScreen';
 import PursuitDetailScreen from '../screens/PursuitDetailScreen';
+import RevisitFlowScreen from '../screens/RevisitFlowScreen';
+import NewCommitmentScreen from '../screens/NewCommitmentScreen';
 
 const Stack = createStackNavigator();
 
@@ -86,6 +88,22 @@ export default function AppNavigator() {
         component={PursuitDetailScreen}
         options={{
           title: 'Pursuit',
+          ...stackScreenOptions,
+        }}
+      />
+      <Stack.Screen
+        name="RevisitFlow"
+        component={RevisitFlowScreen}
+        options={{
+          title: 'Revisit',
+          ...stackScreenOptions,
+        }}
+      />
+      <Stack.Screen
+        name="NewCommitment"
+        component={NewCommitmentScreen}
+        options={{
+          title: 'New commitment',
           ...stackScreenOptions,
         }}
       />

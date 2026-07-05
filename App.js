@@ -16,6 +16,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { supabase } from './src/lib/supabase';
+import { calculateLoggingStreak } from './src/lib/streak';
 import { COLORS } from './src/constants/theme';
 import AuthScreen from './src/screens/AuthScreen';
 import AppNavigator from './src/navigation/AppNavigator';
@@ -40,6 +41,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [appReady, setAppReady] = useState(false);
   const [needsOnboarding, setNeedsOnboarding] = useState(null);
+  const [checkInGateResolved, setCheckInGateResolved] = useState(false);
   const [checkInGateComplete, setCheckInGateComplete] = useState(false);
 
   const [fontsLoaded] = useFonts({
@@ -79,6 +81,7 @@ export default function App() {
   useEffect(() => {
     if (!session) {
       setNeedsOnboarding(null);
+      setCheckInGateResolved(false);
       setCheckInGateComplete(false);
       return;
     }
@@ -100,8 +103,45 @@ export default function App() {
     checkOnboarding();
   }, [session]);
 
+  useEffect(() => {
+    if (!session || needsOnboarding !== false) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const resolveCheckInGate = async () => {
+      const { data } = await supabase.auth.getUser();
+      const uid = data?.user?.id;
+
+      if (cancelled) return;
+
+      if (!uid) {
+        setCheckInGateComplete(true);
+        setCheckInGateResolved(true);
+        return;
+      }
+
+      const { isTodayLogged } = await calculateLoggingStreak(uid);
+
+      if (cancelled) return;
+
+      setCheckInGateComplete(isTodayLogged);
+      setCheckInGateResolved(true);
+    };
+
+    setCheckInGateResolved(false);
+    setCheckInGateComplete(false);
+    resolveCheckInGate();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [session, needsOnboarding]);
+
   const handleOnboardingComplete = () => {
     setNeedsOnboarding(false);
+    setCheckInGateResolved(false);
     setCheckInGateComplete(false);
   };
 
@@ -151,7 +191,25 @@ export default function App() {
     );
   }
 
-  if (!needsOnboarding && !checkInGateComplete) {
+  if (needsOnboarding === false && !checkInGateResolved) {
+    return (
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <SafeAreaProvider>
+          <View
+            style={{
+              flex: 1,
+              backgroundColor: COLORS.bg,
+              justifyContent: 'center',
+              alignItems: 'center',
+            }}>
+            <ActivityIndicator color={COLORS.accent} size={32} />
+          </View>
+        </SafeAreaProvider>
+      </GestureHandlerRootView>
+    );
+  }
+
+  if (needsOnboarding === false && checkInGateResolved && !checkInGateComplete) {
     return (
       <GestureHandlerRootView style={{ flex: 1 }}>
         <SafeAreaProvider>

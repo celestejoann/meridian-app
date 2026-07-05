@@ -5,13 +5,11 @@ import { COLORS, FONTS } from '../constants/theme';
 import AreasManagementScreen from './AreasManagementScreen';
 import IdentityManagementScreen from './IdentityManagementScreen';
 import CommitmentsScreen from './CommitmentsScreen';
-import ProjectsScreen from './ProjectsScreen';
 
 const TABS = [
   { key: 'areas', label: 'Areas' },
   { key: 'identity', label: 'Identity' },
   { key: 'commitments', label: 'Commitments' },
-  { key: 'pursuits', label: 'Pursuits' },
 ];
 
 export default function MyLifeScreen() {
@@ -54,9 +52,6 @@ export default function MyLifeScreen() {
         </View>
         <View key="commitments" style={styles.page}>
           <CommitmentsScreen />
-        </View>
-        <View key="pursuits" style={styles.page}>
-          <ProjectsScreen />
         </View>
       </PagerView>
     </View>

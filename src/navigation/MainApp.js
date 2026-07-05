@@ -13,13 +13,12 @@ import CheckInScreen from '../screens/CheckInScreen';
 import InsightsScreen from '../screens/InsightsScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import MyLifeScreen from '../screens/MyLifeScreen';
-import LegacyScreen from '../screens/LegacyScreen';
+import ProjectsScreen from '../screens/ProjectsScreen';
 import { AppNavigationContext } from './AppNavigationContext';
 
 const BOTTOM_TABS = [
   { key: 'dashboard', label: 'Dashboard', icon: 'home', iconOutline: 'home-outline' },
-  { key: 'checkin', label: 'Check In', icon: 'checkbox', iconOutline: 'checkbox-outline' },
-  { key: 'mylife', label: 'My Life', icon: 'layers', iconOutline: 'layers-outline' },
+  { key: 'pursuits', label: 'Pursuits', icon: 'flag', iconOutline: 'flag-outline' },
   { key: 'insights', label: 'Insights', icon: 'bar-chart', iconOutline: 'bar-chart-outline' },
   { key: 'settings', label: 'Settings', icon: 'settings', iconOutline: 'settings-outline' },
 ];
@@ -44,9 +43,24 @@ export default function MainApp() {
     setBottomTab('dashboard');
   }, []);
 
+  const openCheckIn = useCallback(() => {
+    setBottomTab('checkin');
+  }, []);
+
+  const openMyLife = useCallback(() => {
+    setBottomTab('mylife');
+  }, []);
+
   const navContext = useMemo(
-    () => ({ openLegacy, openInsights, openSettings, openDashboard }),
-    [openLegacy, openInsights, openSettings, openDashboard]
+    () => ({
+      openLegacy,
+      openInsights,
+      openSettings,
+      openDashboard,
+      openCheckIn,
+      openMyLife,
+    }),
+    [openLegacy, openInsights, openSettings, openDashboard, openCheckIn, openMyLife]
   );
 
   const selectBottomTab = useCallback((key) => {
@@ -59,6 +73,8 @@ export default function MainApp() {
         return <DashboardScreen />;
       case 'checkin':
         return <CheckInScreen />;
+      case 'pursuits':
+        return <ProjectsScreen />;
       case 'mylife':
         return <MyLifeScreen />;
       case 'insights':
@@ -69,6 +85,8 @@ export default function MainApp() {
         return <DashboardScreen />;
     }
   };
+
+  const isBottomTabActive = (key) => bottomTab === key;
 
   return (
     <AppNavigationContext.Provider value={navContext}>
@@ -83,7 +101,7 @@ export default function MainApp() {
             { paddingBottom: Math.max(insets.bottom, 8) },
           ]}>
           {BOTTOM_TABS.map((tab) => {
-            const active = bottomTab === tab.key;
+            const active = isBottomTabActive(tab.key);
             return (
               <Pressable
                 key={tab.key}
@@ -115,74 +133,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.bg,
   },
-  topBar: {
-    backgroundColor: COLORS.bg,
-    paddingHorizontal: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-    paddingBottom: 0,
-  },
-  brandingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '100%',
-    marginBottom: 16,
-  },
-  brandTextCol: {
-    marginLeft: 8,
-  },
-  brandName: {
-    fontFamily: 'PlayfairDisplay_700Bold',
-    fontSize: 24,
-    color: COLORS.text,
-  },
-  brandTagline: {
-    fontFamily: 'DMSans_500Medium',
-    fontSize: 9,
-    color: COLORS.accent,
-    letterSpacing: 3,
-  },
-  topTabsRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  topTabBtn: {
-    flex: 1,
-    paddingVertical: 12,
-    alignItems: 'center',
-    backgroundColor: 'transparent',
-    borderBottomWidth: 3,
-    borderRadius: 2,
-  },
-  topTabLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-    fontFamily: FONTS.bodyMedium,
-  },
   content: {
-    flex: 1,
-  },
-  pager: {
-    flex: 1,
-  },
-  pagerPage: {
-    flex: 1,
-  },
-  legacyWrap: {
-    flex: 1,
-  },
-  legacyBack: {
-    paddingHorizontal: 24,
-    paddingVertical: 10,
-  },
-  legacyBackText: {
-    color: COLORS.accent,
-    fontSize: 15,
-    fontWeight: '500',
-    fontFamily: FONTS.bodyMedium,
-  },
-  legacyContent: {
     flex: 1,
   },
   bottomBar: {
